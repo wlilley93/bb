@@ -231,6 +231,16 @@ export const BUILTIN_PLUGINS = [
     defaultEnabled: false,
   },
   {
+    name: "agent-editor",
+    pluginId: "bb--agent-editor",
+    defaultEnabled: true,
+  },
+  {
+    name: "company-sop-editor",
+    pluginId: "bb--company-sop-editor",
+    defaultEnabled: true,
+  },
+  {
     name: "composer",
     pluginId: "bb--composer",
     defaultEnabled: true,

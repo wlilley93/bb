@@ -15,9 +15,19 @@
     "icon": "Repeat"
   },
   {
+    "id": "bb--agent-editor",
+    "name": "Agent Editor",
+    "icon": "FolderOpen"
+  },
+  {
     "id": "bb--composer",
     "name": "Composer",
     "icon": "MessageSquare"
+  },
+  {
+    "id": "bb--company-sop-editor",
+    "name": "Company SOP Editor",
+    "icon": "FileText"
   },
   {
     "id": "bb-ai",

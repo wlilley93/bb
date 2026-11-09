@@ -3,6 +3,10 @@
     "category": "agents-and-providers",
     "screenshots": []
   },
+  "agent-editor": {
+    "category": "agents-and-providers",
+    "screenshots": []
+  },
   "agent-annotations": {
     "category": "code-and-reviews",
     "screenshots": []
@@ -24,6 +28,10 @@
   },
   "bb-ai": {
     "category": "cloud-and-remote",
+    "screenshots": []
+  },
+  "company-sop-editor": {
+    "category": "agents-and-providers",
     "screenshots": []
   },
   "connect": {

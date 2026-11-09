@@ -1,0 +1,31 @@
+{
+  "name": "bb-plugin-bb--company-sop-editor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Edit the company SOP under Agent Operations.",
+  "engines": { "bb": ">=0.0", "bbPluginSdk": ">=0.6.0" },
+  "bb": {
+    "name": "Company SOP Editor",
+    "description": "Edit the company SOP under Agent Operations.",
+    "branding": { "icon": "FileText" },
+    "server": "./server.ts",
+    "app": "./app.tsx"
+  },
+  "keywords": ["bb-plugin"],
+  "scripts": {
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsrs --noEmit"
+  },
+  "dependencies": { "zod": "^4.6.7" },
+  "devDependencies": {
+    "@bb/plugin-build": "workspace:*",
+    "@get-bb/plugin-sdk": "workspace:*",
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "react": "^19.3.1",
+    "tsrs": "0.18.0-ts7.1.0-dev.20260929",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "vitest": "^4.1.12"
+  }
+}

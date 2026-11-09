@@ -8,6 +8,8 @@
   },
   "dependencies": {
     "bb-plugin-account-pool": "workspace:*",
+    "bb-plugin-bb--agent-editor": "workspace:*",
+    "bb-plugin-bb--company-sop-editor": "workspace:*",
     "bb-plugin-agent-annotations": "workspace:*",
     "bb-plugin-ask-user-question": "workspace:*",
     "bb-plugin-automations": "workspace:*",
