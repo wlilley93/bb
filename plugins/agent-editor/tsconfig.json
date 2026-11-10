@@ -10,5 +10,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["server.ts", "app.tsx", "company-directory.ts", "server.test.ts", "vitest.config.ts"]
+  "include": ["server.ts", "app.tsx", "chrome.tsx", "seat-sidebar.tsx", "company-directory.ts", "server.test.ts", "vitest.config.ts"]
 }

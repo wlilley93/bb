@@ -24,6 +24,7 @@ export type CreateProjectSourceInput = CreateProjectLocalPathSourceInput;
 export interface CreateProjectInput {
   name: string;
   source: CreateProjectSourceInput;
+  parentProjectId?: string | null;
 }
 
 export type ProjectRow = typeof projects.$inferSelect;
@@ -83,12 +84,27 @@ export function listPublicProjects(db: DbQueryConnection): ProjectRow[] {
     .all();
 }
 
-function getLastPublicProject(db: DbQueryConnection): ProjectRow | null {
+function siblingParentFilter(parentProjectId: string | null) {
+  return parentProjectId === null
+    ? isNull(projects.parentProjectId)
+    : eq(projects.parentProjectId, parentProjectId);
+}
+
+function listSiblingProjects(db: DbQueryConnection, parentProjectId: string | null): ProjectRow[] {
+  return db
+    .select()
+    .from(projects)
+    .where(and(publicProjectFilter(), siblingParentFilter(parentProjectId)))
+    .orderBy(asc(projects.sortKey), asc(projects.id))
+    .all();
+}
+
+function getLastSibling(db: DbQueryConnection, parentProjectId: string | null): ProjectRow | null {
   return (
     db
       .select()
       .from(projects)
-      .where(publicProjectFilter())
+      .where(and(publicProjectFilter(), siblingParentFilter(parentProjectId)))
       .orderBy(desc(projects.sortKey), desc(projects.id))
       .limit(1)
       .get() ?? null
@@ -142,15 +158,17 @@ function insertProject(tx: DbTransaction, input: CreateProjectInput) {
   const now = Date.now();
   const projectId = createProjectId();
   const sourceId = createProjectSourceId();
-  const lastProject = getLastPublicProject(tx);
+  const lastProject = getLastSibling(tx, input.parentProjectId ?? null);
   const sortKey = lastProject
     ? createOrderKeyAfter({ previousKey: lastProject.sortKey })
     : createOrderKeyBetween({ previousKey: null, nextKey: null });
+  assertProjectParent(tx, projectId, input.parentProjectId ?? null);
   const project = tx
     .insert(projects)
     .values({
       id: projectId,
       name: input.name,
+      parentProjectId: input.parentProjectId ?? null,
       sortKey,
       createdAt: now,
       updatedAt: now,
@@ -236,6 +254,49 @@ export function getProject(db: DbConnection, id: string) {
   return prepareCachedQuery(db, prepareGetProject).get({ id }) ?? null;
 }
 
+export class ProjectParentError extends Error {
+  readonly reason: "cycle" | "missing" | "personal";
+
+  constructor(reason: "cycle" | "missing" | "personal") {
+    super(reason);
+    this.name = "ProjectParentError";
+    this.reason = reason;
+  }
+}
+
+export function assertProjectParent(
+  db: DbQueryConnection,
+  projectId: string,
+  parentProjectId: string | null,
+): void {
+  const read = (id: string) => db.select().from(projects).where(eq(projects.id, id)).get() ?? null;
+  if (parentProjectId === null) return;
+  if (parentProjectId === projectId) throw new ProjectParentError("cycle");
+  const self = read(projectId);
+  if (self?.kind === "personal" || parentProjectId === PERSONAL_PROJECT_ID) {
+    throw new ProjectParentError("personal");
+  }
+  let cursor: string | null = parentProjectId;
+  const seen = new Set<string>();
+  while (cursor) {
+    if (cursor === projectId || seen.has(cursor)) throw new ProjectParentError("cycle");
+    seen.add(cursor);
+    const row = read(cursor);
+    if (!row || row.deletedAt !== null) throw new ProjectParentError("missing");
+    if (row.kind === "personal") throw new ProjectParentError("personal");
+    cursor = row.parentProjectId;
+  }
+}
+
+export function projectHasLiveChildren(db: DbQueryConnection, projectId: string): boolean {
+  return db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(and(eq(projects.parentProjectId, projectId), isNull(projects.deletedAt)))
+    .limit(1)
+    .get() !== undefined;
+}
+
 export function getPersonalProject(db: DbConnection) {
   return (
     db
@@ -270,6 +331,7 @@ export function ensurePersonalProject(db: DbConnection) {
 
 export interface UpdateProjectInput {
   name?: string;
+  parentProjectId?: string | null;
 }
 
 export function setProjectGitRemoteUrlIfMissing(
@@ -301,6 +363,9 @@ export function updateProject(
   id: string,
   input: UpdateProjectInput,
 ) {
+  if (input.parentProjectId !== undefined) {
+    assertProjectParent(db, id, input.parentProjectId);
+  }
   const now = Date.now();
   const updated = db
     .update(projects)
@@ -364,6 +429,12 @@ export function reorderProject({
         return { kind: "stale_neighbor" };
       }
       if (
+        (previousProject !== null && previousProject.parentProjectId !== movedProject.parentProjectId) ||
+        (nextProject !== null && nextProject.parentProjectId !== movedProject.parentProjectId)
+      ) {
+        return { kind: "stale_neighbor" };
+      }
+      if (
         previousProject !== null &&
         nextProject !== null &&
         previousProject.sortKey >= nextProject.sortKey
@@ -371,7 +442,7 @@ export function reorderProject({
         return { kind: "invalid_neighbor_order" };
       }
 
-      const currentProjects = listPublicProjects(tx);
+      const currentProjects = listSiblingProjects(tx, movedProject.parentProjectId);
       const currentIndex = currentProjects.findIndex(
         (project) => project.id === projectId,
       );

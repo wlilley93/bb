@@ -30,10 +30,6 @@
     "category": "cloud-and-remote",
     "screenshots": []
   },
-  "company-sop-editor": {
-    "category": "agents-and-providers",
-    "screenshots": []
-  },
   "connect": {
     "category": "cloud-and-remote",
     "screenshots": []
@@ -60,6 +56,14 @@
   },
   "pdf-preview": {
     "category": "file-viewers-and-editors",
+    "screenshots": []
+  },
+  "office": {
+    "category": "file-viewers-and-editors",
+    "screenshots": []
+  },
+  "company-linear": {
+    "category": "code-and-reviews",
     "screenshots": []
   },
   "provider-codex": {

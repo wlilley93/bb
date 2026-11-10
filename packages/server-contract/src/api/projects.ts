@@ -62,6 +62,7 @@ export type CreateProjectSourceRequest = z.infer<
 
 export const createProjectRequestSchema = z.object({
   name: z.string().min(1),
+  parentProjectId: z.string().min(1).nullable().optional(),
   source: createLocalPathProjectSourceRequestSchema,
 });
 export type CreateProjectRequest = z.infer<typeof createProjectRequestSchema>;
@@ -230,10 +231,12 @@ export type ProjectAttachmentUploadForm = Record<"file", Blob>;
 export const updateProjectRequestSchema = z
   .object({
     name: z.string().min(1),
+    parentProjectId: z.string().min(1).nullable(),
+    primaryThreadId: z.string().min(1).nullable(),
   })
   .partial()
   .refine(
-    (value) => value.name !== undefined,
+    (value) => value.name !== undefined || value.parentProjectId !== undefined || value.primaryThreadId !== undefined,
     "At least one field must be provided",
   );
 export type UpdateProjectRequest = z.infer<typeof updateProjectRequestSchema>;
@@ -420,6 +423,8 @@ export type UpdateSkillRequest = z.infer<typeof updateSkillRequestSchema>;
 
 export const projectResponseSchema = projectSchema.extend({
   sources: z.array(projectSourceSchema),
+  primaryThreadId: z.string().nullable().optional(),
+  previousPrimaryThreadId: z.string().nullable().optional(),
 });
 export type ProjectResponse = z.infer<typeof projectResponseSchema>;
 

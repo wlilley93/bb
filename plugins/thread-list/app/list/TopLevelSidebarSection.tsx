@@ -53,6 +53,7 @@ interface TopLevelSidebarSectionCollapseControl {
 export interface TopLevelSidebarSectionProps {
   label: string;
   labelEditor?: ReactNode;
+  onLabelActivate?: () => void;
   onRename?: () => void;
   children: ReactNode;
   dropParentKey?: string;
@@ -75,6 +76,7 @@ export interface TopLevelSidebarSectionProps {
 export function TopLevelSidebarSection({
   label,
   labelEditor,
+  onLabelActivate,
   onRename,
   children,
   dropParentKey,
@@ -198,6 +200,29 @@ export function TopLevelSidebarSection({
       >
         <span className="relative z-10 flex min-w-0 flex-1 items-center gap-1 text-left">
           {labelEditor ?? (
+            onLabelActivate ? (
+              <button
+                type="button"
+                className="min-w-0 truncate text-left"
+                title={label}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onLabelActivate();
+                }}
+                onDoubleClick={
+                  onRename
+                    ? (event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onRename();
+                      }
+                    : undefined
+                }
+              >
+                {label}
+              </button>
+            ) : (
             <span
               className="min-w-0 truncate"
               title={label}
@@ -213,6 +238,7 @@ export function TopLevelSidebarSection({
             >
               {label}
             </span>
+            )
           )}
           {collapseControl ? (
             <button

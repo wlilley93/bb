@@ -28,6 +28,7 @@ import {
   readNewEnvironmentHostIdFromLocationState,
   readRootComposeEnvironmentTargetFromLocationState,
   readRootComposeSectionTargetFromLocationState,
+  readAgentFromLocationState,
   readInitialPromptFromLocationState,
   shouldReplaceInitialPromptFromLocationState,
   shouldStartComposingFromLocationState,
@@ -550,6 +551,74 @@ describe("buildMobileRecentThreads", () => {
     );
 
     expect(threadIds).toEqual(["thr_personal", "thr_app", "thr_docs"]);
+  });
+
+  it("keeps threads from the current head's tree", () => {
+    const sidebarNavigation: SidebarBootstrapResponse =
+      makeSidebarBootstrapResponse({
+        personalProject: makeProject({
+          id: PERSONAL_PROJECT_ID,
+          kind: "personal",
+          name: "Personal",
+          threads: [
+            makeThread({
+              id: "thr_personal",
+              projectId: PERSONAL_PROJECT_ID,
+            }),
+          ],
+        }),
+        projects: [
+          makeProject({
+            id: "proj_family",
+            kind: "standard",
+            name: "Family Operations",
+            threads: [
+              makeThread({
+                id: "thr_family",
+                projectId: "proj_family",
+              }),
+            ],
+          }),
+          makeProject({
+            id: "proj_sop",
+            kind: "standard",
+            name: "Company SOP",
+            threads: [
+              makeThread({
+                id: "thr_sop",
+                projectId: "proj_sop",
+              }),
+            ],
+          }),
+        ],
+      });
+
+    const threadIds = buildMobileRecentThreads({
+      agentId: "head-family-ops",
+      agentSeatIds: ["head-family-ops", "vp-family-ops", "head-projects"],
+      agentModeByThreadId: new Map([
+        ["thr_personal", null],
+        ["thr_family", "vp-family-ops"],
+        ["thr_sop", "head-projects"],
+      ]),
+      sidebarNavigation,
+    }).map((thread) => thread.id);
+
+    expect(threadIds).toEqual(["thr_family"]);
+  });
+});
+
+describe("readAgentFromLocationState", () => {
+  it("returns the seat the sidebar opened", () => {
+    expect(readAgentFromLocationState({ agent: "head-projects" })).toBe(
+      "head-projects",
+    );
+  });
+
+  it("returns null when the home was not opened from a seat", () => {
+    expect(readAgentFromLocationState(null)).toBeNull();
+    expect(readAgentFromLocationState({ focusPrompt: true })).toBeNull();
+    expect(readAgentFromLocationState({ agent: "" })).toBeNull();
   });
 });
 

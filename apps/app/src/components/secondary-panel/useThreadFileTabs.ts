@@ -540,11 +540,13 @@ export function useThreadFileTabs({
   const openTab = useCallback(
     (
       request: OpenSecondaryPanelTabRequest,
-      options?: { viewer?: FileOpenerOverride },
+      options?: { keepNewTab?: boolean; viewer?: FileOpenerOverride },
     ): SecondaryPanelTab | null => {
       return openResolvedTab(
         request,
-        request.kind === "browser" ? "replace-new-tab" : "open",
+        request.kind === "browser" && options?.keepNewTab !== true
+          ? "replace-new-tab"
+          : "open",
         options?.viewer,
       );
     },

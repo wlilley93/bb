@@ -129,6 +129,7 @@ export function useBbNavigate(): BbNavigate {
         state: {
           focusPrompt: options?.focusPrompt ?? false,
           initialPrompt: options?.initialPrompt ?? "",
+          ...(options?.agent ? { agent: options.agent } : {}),
           ...(options?.placement !== undefined
             ? { placement: options.placement }
             : {}),

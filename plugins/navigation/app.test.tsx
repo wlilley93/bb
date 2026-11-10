@@ -309,9 +309,9 @@ describe("Top list", () => {
     ).toBeNull();
   });
 
-  it("shows More only when something is hidden, and activates hidden items from it", async () => {
+  it("keeps More available when nothing is hidden, and activates hidden items from it", async () => {
     renderTopList([NEW_THREAD, PLUGINS]);
-    expect(screen.queryByRole("button", { name: "More" })).toBeNull();
+    expect(screen.getByRole("button", { name: "More" })).toBeDefined();
     cleanup();
 
     const view = renderTopList([NEW_THREAD, SEARCH, PLUGINS]);

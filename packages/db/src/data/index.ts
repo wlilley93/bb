@@ -7,12 +7,16 @@ export {
   getPublicProjectByLocalPathSource,
   listPublicProjects,
   markProjectDeleted,
+  projectHasLiveChildren,
+  assertProjectParent,
+  ProjectParentError,
   reorderProject,
   setProjectGitRemoteUrlIfMissing,
   updateProject,
   deleteProject,
 } from "./projects.js";
 export type { ReorderProjectResult } from "./projects.js";
+export { listSeatPrimaries, setSeatPrimary, SeatPrimaryError } from "./seat-primaries.js";
 
 export {
   getThreadConversationOutlineRecord,

@@ -1032,20 +1032,6 @@
         "$TURBO_ROOT$/packages/plugin-registry/flavors/**"
       ]
     },
-    "bb-plugin-bb--agent-editor#typecheck": {
-      "dependsOn": ["@get-bb/plugin-sdk#build:types", "topo"]
-    },
-    "bb-plugin-bb--agent-editor#test": {
-      "env": ["VITEST_MAX_WORKERS"],
-      "dependsOn": ["@get-bb/plugin-sdk#build", "topo"]
-    },
-    "bb-plugin-bb--company-sop-editor#typecheck": {
-      "dependsOn": ["@get-bb/plugin-sdk#build:types", "topo"]
-    },
-    "bb-plugin-bb--company-sop-editor#test": {
-      "env": ["VITEST_MAX_WORKERS"],
-      "dependsOn": ["@get-bb/plugin-sdk#build", "topo"]
-    },
     "bb-plugin-bb--composer#typecheck": {
       "dependsOn": ["@get-bb/plugin-sdk#build:types", "topo"],
       "inputs": [
@@ -1436,6 +1422,17 @@
       "dependsOn": ["@get-bb/plugin-sdk#build:types", "topo"]
     },
     "bb-plugin-pdf-preview#test": {
+      "env": ["VITEST_MAX_WORKERS"],
+      "dependsOn": [
+        "//#ensure-native-modules",
+        "@get-bb/plugin-sdk#build",
+        "topo"
+      ]
+    },
+    "bb-plugin-bb--office#typecheck": {
+      "dependsOn": ["@get-bb/plugin-sdk#build:types", "topo"]
+    },
+    "bb-plugin-bb--office#test": {
       "env": ["VITEST_MAX_WORKERS"],
       "dependsOn": [
         "//#ensure-native-modules",

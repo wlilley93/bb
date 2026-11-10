@@ -1509,6 +1509,10 @@ export interface PluginSidebarProject {
   href: string;
   /** The app-relative URL of the project's settings page. */
   settingsHref: string;
+  /** The seat this one sits under. Null for a head, or a project the list does not contain. */
+  parentProjectId?: string | null;
+  /** The thread this seat opens. Null until one is chosen. */
+  primaryThreadId?: string | null;
 }
 
 /**
@@ -5359,6 +5363,11 @@ export interface BbNavigate {
    */
   toCompose(options?: {
     projectId?: string;
+    /**
+     * The OpenCode agent for this home. It is the session mode, taken from
+     * the seat, and the composer does not offer another.
+     */
+    agent?: string;
     initialPrompt?: string;
     focusPrompt?: boolean;
     placement?: { sectionId: string | null; pinned: boolean };

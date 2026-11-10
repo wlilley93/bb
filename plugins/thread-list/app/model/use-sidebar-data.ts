@@ -16,6 +16,9 @@ export interface SidebarProject {
   href: string;
   settingsHref: string;
   isPersonal: boolean;
+  parentProjectId: string | null;
+  primaryThreadId: string | null;
+  depth: number;
   threads: SidebarThread[];
 }
 
@@ -54,15 +57,43 @@ function sameHosts(
 
 function sameProjectShape(
   previous: SidebarProject,
-  project: PluginSidebarProject,
+  project: PluginSidebarProject & { depth: number },
 ): boolean {
   return (
     previous.id === project.id &&
     previous.name === project.name &&
     previous.href === project.href &&
     previous.settingsHref === project.settingsHref &&
-    previous.isPersonal === project.isPersonal
+    previous.isPersonal === project.isPersonal &&
+    previous.parentProjectId === (project.parentProjectId ?? null) &&
+    previous.primaryThreadId === (project.primaryThreadId ?? null) &&
+    previous.depth === project.depth
   );
+}
+
+function seatProjects(
+  projects: readonly PluginSidebarProject[],
+): Array<PluginSidebarProject & { depth: number }> {
+  const ids = new Set(projects.map((project) => project.id));
+  const byParent = new Map<string | null, PluginSidebarProject[]>();
+  for (const project of projects) {
+    const parent =
+      project.parentProjectId && ids.has(project.parentProjectId)
+        ? project.parentProjectId
+        : null;
+    const list = byParent.get(parent);
+    if (list) list.push(project);
+    else byParent.set(parent, [project]);
+  }
+  const seated: Array<PluginSidebarProject & { depth: number }> = [];
+  const visit = (parent: string | null, depth: number): void => {
+    for (const project of byParent.get(parent) ?? []) {
+      seated.push({ ...project, depth });
+      visit(project.id, depth + 1);
+    }
+  };
+  visit(null, 0);
+  return seated;
 }
 
 const EMPTY_THREADS: SidebarThread[] = [];
@@ -92,7 +123,7 @@ export function buildSidebarData(
   const previousProjectsById = new Map(
     previous?.projects.map((project) => [project.id, project]) ?? [],
   );
-  const groupedProjects = projects.map<SidebarProject>((project) => {
+  const groupedProjects = seatProjects(projects).map<SidebarProject>((project) => {
     const bucket = threadsByProjectId.get(project.id) ?? EMPTY_THREADS;
     const before = previousProjectsById.get(project.id);
     if (
@@ -108,6 +139,9 @@ export function buildSidebarData(
       href: project.href,
       settingsHref: project.settingsHref,
       isPersonal: project.isPersonal,
+      parentProjectId: project.parentProjectId ?? null,
+      primaryThreadId: project.primaryThreadId ?? null,
+      depth: project.depth,
       threads:
         before !== undefined && sameElements(before.threads, bucket)
           ? before.threads

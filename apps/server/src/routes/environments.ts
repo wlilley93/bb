@@ -20,7 +20,10 @@ import {
 } from "@bb/server-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
-import { COMMAND_TIMEOUT_MS } from "../constants.js";
+import {
+  COMMAND_TIMEOUT_MS,
+  PATH_TYPEAHEAD_TIMEOUT_MS,
+} from "../constants.js";
 import {
   readCommitInputs,
   refreshGitState,
@@ -213,7 +216,7 @@ export function registerEnvironmentRoutes(
       const result = await callHostRetryableOnlineRpc(deps, {
         hostId: environment.hostId,
         signal: context.req.raw.signal,
-        timeoutMs: COMMAND_TIMEOUT_MS,
+        timeoutMs: PATH_TYPEAHEAD_TIMEOUT_MS,
         command: {
           type: "host.list_paths",
           path: environment.path,

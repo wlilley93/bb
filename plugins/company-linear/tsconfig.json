@@ -10,5 +10,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["server.ts", "app.tsx", "server.test.ts", "vitest.config.ts"]
+  "include": ["server.ts", "app.tsx", "chrome.tsx", "linear.ts", "connection.ts", "linear.test.ts", "connection.test.ts", "vitest.config.ts"]
 }

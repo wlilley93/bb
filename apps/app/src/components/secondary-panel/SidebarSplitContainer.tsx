@@ -8,7 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import { useAtomValue } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { useAppCommandHandler } from "@/components/commands/AppCommandProvider";
 import { cn } from "@bb/shared-ui/lib/utils";
 import { beginSplitDrag, type SplitDropTarget } from "@/lib/split-drag";
@@ -36,6 +36,7 @@ import {
 } from "@/views/thread-detail/PaneContext";
 import {
   adjacentSidebarTab,
+  arrangeWorkspaceWindows,
   createSidebarSplitState,
   focusSidebarPane,
   getSidebarGroupForPane,
@@ -61,6 +62,7 @@ import {
   type SidebarTabPlacement,
   type SidebarTabGroup,
 } from "./sidebarSplitLayout";
+import { workspaceWindowRequestAtom } from "./workspaceWindowRequest";
 import {
   PANEL_TAB_DRAG_DISTANCE_PX,
   type SecondaryPanelTabReorderRequest,
@@ -300,6 +302,42 @@ export function SidebarSplitContainer({
     },
     [activeTabId, onActivateTab],
   );
+
+  const workspaceWindowRequest = useAtomValue(workspaceWindowRequestAtom);
+  const setWorkspaceWindowRequest = useSetAtom(workspaceWindowRequestAtom);
+  const appliedWorkspaceWindowNonce = useRef<number | null>(null);
+  useEffect(() => {
+    if (
+      workspaceWindowRequest === null ||
+      appliedWorkspaceWindowNonce.current === workspaceWindowRequest.nonce
+    ) {
+      return;
+    }
+    const current = stateRef.current;
+    const tabIsOpen = listPanes(current.layout.root).some((pane) =>
+      getSidebarGroupForPane(current, pane.paneId)?.tabIds.includes(
+        workspaceWindowRequest.tabId,
+      ),
+    );
+    if (!tabIsOpen) return;
+    appliedWorkspaceWindowNonce.current = workspaceWindowRequest.nonce;
+    setWorkspaceWindowRequest(null);
+    commitState((latest) => {
+      const arranged = arrangeWorkspaceWindows(
+        latest,
+        workspaceWindowRequest.tabId,
+      );
+      return isFullScreen
+        ? setSidebarPaneMaximized(arranged, arranged.layout.focusedPaneId)
+        : arranged;
+    }, true);
+  }, [
+    commitState,
+    isFullScreen,
+    setWorkspaceWindowRequest,
+    tabs,
+    workspaceWindowRequest,
+  ]);
 
   useEffect(() => {
     if (previousFullScreen.current === isFullScreen) return;

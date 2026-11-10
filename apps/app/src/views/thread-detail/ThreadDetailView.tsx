@@ -104,6 +104,7 @@ import {
 } from "@/lib/route-paths";
 import { THREAD_INFO_FIXED_TAB_REFERENCE } from "@/components/secondary-panel/thread-info-fixed-tab-navigation";
 import { ThreadDetailHeader } from "./ThreadDetailHeader";
+import { useWorkspaceWindowActions } from "@/components/secondary-panel/workspaceWindowRequest";
 import {
   CORE_THREAD_CONTEXT_CARD_ROWS,
   CORE_THREAD_CONTEXT_CARD_SECTIONS,
@@ -967,6 +968,14 @@ function ThreadDetailViewInternal(
     reveal: openCompactDrawer,
     onCloseLastTab: secondaryPanelDrawerVisibility.closeDrawer,
   });
+  const workspaceWindows = useWorkspaceWindowActions({
+    activateTab,
+    onFilesOpened: () => setShouldAutoFocusNewTab(true),
+    openTab,
+    reveal: openCompactDrawer,
+    startTerminal: terminals.start,
+    tabs: orderedSecondaryFileTabs,
+  });
   const appNavigationCapabilities = useMemo(
     () => ({
       openFilePreview: openLiveFilePreview,
@@ -1514,6 +1523,13 @@ function ThreadDetailViewInternal(
       threadTitle={threadTitle}
       contextCardButton={<ThreadContextCardHeaderButton />}
       workspaceOpenButton={workspaceOpenButton}
+      workspaceWindows={{
+        browserDisabled: !isDesktopBrowserAvailable(),
+        onBrowser: workspaceWindows.openBrowser,
+        onFiles: workspaceWindows.openFiles,
+        onTerminal: workspaceWindows.openTerminal,
+        terminalDisabled: !terminals.canStart,
+      }}
     />
   );
   const threadScreen = (

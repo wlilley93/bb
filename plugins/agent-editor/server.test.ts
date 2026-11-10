@@ -5,12 +5,18 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   ensureCompanyDirectory,
+  folderForSeat,
+  listInstalledSeats,
+  listSeatFolders,
   renderThenRestart,
+  addPermissionRequest,
   saveCanonDuty,
+  saveCompanyFile,
   saveRole,
   saveSeatRequest,
   writeSharedRoot,
 } from "./company-directory.js";
+import { liveHeadFolders, nestSeatFolders } from "./seat-folders.js";
 
 const packDir = path.join(import.meta.dirname, "..", "..", "..", "..", "boltrig-opencode-company-SOP");
 const configPackage = path.join(import.meta.dirname, "..", "..", "..", "..", "boltrig-opencode-config");
@@ -46,6 +52,16 @@ afterEach(async () => {
 });
 
 describe("agent editor", () => {
+  it("reads a head, VP, or PM from the file name when the profile has no tier", async () => {
+    const { opencodeDir } = await layout();
+    await writeFile(path.join(opencodeDir, "agents", "head-engineering.md"), "---\nmode: all\n---\n");
+    await writeFile(path.join(opencodeDir, "agents", "eng-lead.md"), "---\nmode: all\ntier: seat\n---\n");
+    const { seats } = await listInstalledSeats(opencodeDir);
+    expect(seats.find((seat) => seat.id === "head-engineering")?.tier).toBe("head");
+    expect(seats.find((seat) => seat.id === "pm")?.tier).toBe("pm");
+    expect(seats.find((seat) => seat.id === "eng-lead")?.tier).toBe("seat");
+  });
+
   it("creates Agent Operations from the blank pack and leaves the OpenCode config untouched", async () => {
     const { root, opencodeDir, rootFile } = await layout();
     const before = await readFile(path.join(opencodeDir, "agents", "pm.md"), "utf8");
@@ -121,5 +137,102 @@ describe("agent editor", () => {
     await expect(readFile(path.join(opencodeDir, "agents", "desk.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
     expect(result.reason).toContain("vp vp-records");
     expect(result.reason).toContain("primary desk");
+  });
+});
+
+describe("folder for a seat", () => {
+  it("opens the folder whose record names the seat, and a shared seat opens the head's folder", async () => {
+    const rootParent = await mkdtemp(path.join(tmpdir(), "boltrig-homes-"));
+    dirs.push(rootParent);
+    const root = path.join(rootParent, "home");
+    const personal = path.join(root, "Personal Operations");
+    const travel = path.join(personal, "Travel");
+    const health = path.join(personal, "Health and Wellbeing");
+    const family = path.join(root, "Family Operations");
+    const familyHome = path.join(family, "Home");
+    const ignored = path.join(root, "node_modules", "pkg");
+    await mkdir(path.join(travel, ".meta"), { recursive: true });
+    await mkdir(path.join(health, ".meta"), { recursive: true });
+    await mkdir(path.join(personal, ".meta"), { recursive: true });
+    await mkdir(path.join(familyHome, ".meta"), { recursive: true });
+    await mkdir(path.join(family, ".meta"), { recursive: true });
+    await mkdir(path.join(ignored, ".meta"), { recursive: true });
+    const record = (dir: string, profile: string, kind = "function.json") =>
+      writeFile(path.join(dir, ".meta", kind), JSON.stringify({ agent_profile: profile }));
+    await record(personal, "head-personal-ops");
+    await record(travel, "vp-personal-ops");
+    await record(health, "vp-personal-ops");
+    await record(family, "head-family-ops");
+    await record(familyHome, "vp-family-ops");
+    await record(ignored, "head-personal-ops");
+    const canonical = await realpath(root);
+    expect(await folderForSeat(canonical, "head-personal-ops")).toEqual({
+      path: await realpath(personal),
+      name: "Personal Operations",
+      own: true,
+    });
+    expect(await folderForSeat(canonical, "vp-personal-ops")).toEqual({
+      path: await realpath(personal),
+      name: "Personal Operations",
+      own: false,
+    });
+    expect(await folderForSeat(canonical, "vp-family-ops")).toEqual({
+      path: await realpath(familyHome),
+      name: "Home",
+      own: true,
+    });
+    expect(await folderForSeat(canonical, "head-engineering")).toBeNull();
+    const listed = await listSeatFolders(canonical);
+    expect(listed.map((folder) => folder.name).sort()).toEqual(
+      ["Family Operations", "Health and Wellbeing", "Home", "Personal Operations", "Travel"].sort(),
+    );
+  });
+
+  it("stops the tree at a PM folder", () => {
+    const nested = nestSeatFolders([
+      { path: "/h/Projects", name: "Projects", seat: "head-projects" },
+      { path: "/h/Projects/Boltrig", name: "Boltrig", seat: "vp-projects" },
+      { path: "/h/Projects/Boltrig/bb", name: "bb", seat: "pm-projects" },
+      { path: "/h/Projects/Boltrig/bb/worktrees", name: "worktrees", seat: "pm-projects" },
+      { path: "/h/Projects/liaison", name: "liaison", seat: "pm-projects" },
+    ], new Set(["pm-projects"]));
+    expect(nested.map((folder) => folder.name)).toEqual(["Projects"]);
+    expect(nested[0]?.children.map((folder) => folder.name)).toEqual(["Boltrig", "liaison"]);
+    expect(nested[0]?.children[0]?.children.map((folder) => folder.name)).toEqual(["bb"]);
+    expect(nested[0]?.children[0]?.children[0]?.children).toEqual([]);
+  });
+
+  it("keeps the shallower folder when a head is copied deeper", () => {
+    const live = { path: "/h/Research", name: "Research", seat: "head-research", children: [] };
+    const copy = { path: "/h/Backups/research-three-vps-20261105", name: "research-three-vps-20261105", seat: "head-research", children: [] };
+    expect(liveHeadFolders([copy, live]).map((folder) => folder.name)).toEqual(["Research"]);
+  });
+
+  it("adds an index line when a reference is saved", async () => {
+    const { root, rootFile } = await layout();
+    const company = await ensureCompanyDirectory(await writeSharedRoot(root, rootFile), packDir);
+    const reference = await readFile(path.join(company, "References", "terms.md"), "utf8");
+    await saveCompanyFile(company, "References/terms.md", reference, "2026-11-09");
+    const firm = await readFile(path.join(company, "Instructions", "firm.md"), "utf8");
+    expect(firm).toContain("- `terms` — load when this reference is named.");
+    expect(firm.startsWith("<!-- from: Company SOP Editor 2026-11-09 -->")).toBe(true);
+  });
+
+  it("adds a policy register row and refuses a permission header on a role", async () => {
+    const { root, rootFile } = await layout();
+    const company = await ensureCompanyDirectory(await writeSharedRoot(root, rootFile), packDir);
+    await addPermissionRequest(company, {
+      id: "no-send",
+      rule: "Nothing leaves the company without a person.",
+      reason: "A person sends.",
+      layer: "permission",
+      gap: "none",
+      owner: "head-agent-ops",
+    }, "2026-11-09");
+    const register = await readFile(path.join(company, "policies", "POLICY-REGISTER.md"), "utf8");
+    expect(register).toContain("| no-send |");
+    expect(register).not.toMatch(/^permissions:/m);
+    await expect(saveCompanyFile(company, "Roles/clerk.md", "---\npermissions:\n  - action: send\n---\n\nClerk.\n", "2026-11-09"))
+      .rejects.toThrow(/permission header/);
   });
 });

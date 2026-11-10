@@ -32,7 +32,11 @@ export const SortableProjectRow = memo(function SortableProjectRow({
       project={project}
       projectDragBindings={dragBindings}
       projectRowRef={setNodeRef}
-      projectRowStyle={style}
+      projectRowStyle={
+        project.depth > 0
+          ? { ...style, marginLeft: project.depth * 12 }
+          : style
+      }
     />
   );
 });

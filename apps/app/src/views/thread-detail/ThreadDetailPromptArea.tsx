@@ -2307,6 +2307,7 @@ export function ThreadDetailPromptArea({
         options={placedSessionOptions.footer}
         choices={sessionOptionChoices.choices}
         onChange={sessionOptionChoices.choose}
+        disabled
       />
     );
 

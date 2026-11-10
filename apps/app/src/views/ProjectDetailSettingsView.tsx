@@ -334,6 +334,17 @@ export function ProjectDetailSettingsView() {
           (option) => option.value === defaults.permissionMode,
         )?.label ?? defaults.permissionMode);
   const now = Date.now();
+  const parentChoices = (projects ?? []).filter((entry) => {
+    if (!project || entry.id === project.id) return false;
+    let cursor: string | null | undefined = entry.parentProjectId;
+    const seen = new Set<string>();
+    while (cursor) {
+      if (cursor === project.id || seen.has(cursor)) return false;
+      seen.add(cursor);
+      cursor = projects?.find((candidate) => candidate.id === cursor)?.parentProjectId;
+    }
+    return true;
+  });
 
   return (
     <PageShell contentClassName="pt-4 md:pt-5">
@@ -369,6 +380,29 @@ export function ProjectDetailSettingsView() {
                 {" · "}
                 {pluralize(project.threads.length, "thread")}
               </p>
+              <label className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                Sits under
+                <select
+                  aria-label="Parent seat"
+                  className="h-7 rounded-md border border-input bg-transparent px-2 text-xs text-foreground"
+                  value={project.parentProjectId ?? ""}
+                  disabled={updateProject.isPending}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    updateProject.mutate({
+                      id: project.id,
+                      parentProjectId: next.length > 0 ? next : null,
+                    });
+                  }}
+                >
+                  <option value="">Nothing. This is a top seat.</option>
+                  {parentChoices.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
             <ResourceOverflowMenu
               label={`${project.name} actions`}

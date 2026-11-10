@@ -162,6 +162,9 @@ export const projects = sqliteTable(
     name: text("name").notNull(),
     gitRemoteUrl: text("git_remote_url"),
     sortKey: text("sort_key").notNull().default("V"),
+    parentProjectId: text("parent_project_id").references(
+      (): AnySQLiteColumn => projects.id,
+    ),
     deletedAt: integer("deleted_at"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
@@ -169,10 +172,27 @@ export const projects = sqliteTable(
   (table) => [
     index("projects_updated_idx").on(table.updatedAt),
     index("projects_deleted_idx").on(table.deletedAt),
+    index("projects_parent_idx").on(table.parentProjectId),
     index("projects_sort_idx").on(table.sortKey, table.id),
     uniqueIndex("projects_personal_singleton_idx")
       .on(table.kind)
       .where(sql`${table.kind} = 'personal'`),
+  ],
+);
+
+/** One primary thread per person per seat. bb has one local person until it has accounts. */
+export const seatPrimaries = sqliteTable(
+  "seat_primaries",
+  {
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    personKey: text("person_key").notNull(),
+    threadId: text("thread_id"),
+    previousThreadId: text("previous_thread_id"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.personKey] }),
   ],
 );
 

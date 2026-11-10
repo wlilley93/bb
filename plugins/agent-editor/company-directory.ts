@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -119,10 +119,11 @@ export async function listInstalledSeats(opencodeDir: string): Promise<{ doctrin
     if (!name.endsWith(".md")) continue;
     const text = await readFile(path.join(agentsDir, name), "utf8");
     const matter = frontMatter(text);
+    const id = name.slice(0, -3);
     seats.push({
-      id: name.slice(0, -3),
+      id,
       mode: scalar(matter, "mode"),
-      tier: scalar(matter, "tier"),
+      tier: installedTier(id, scalar(matter, "tier")),
       rank: scalar(matter, "rank"),
       permissions: block(matter, "permissions"),
       reach: section(text, "Reach"),
@@ -148,6 +149,14 @@ export async function saveCanonDuty(dir: string, seat: string, body: string, ope
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, matter({ seat }, body), "utf8");
   return file;
+}
+
+export async function readCanonDuty(dir: string, seat: string): Promise<string> {
+  assertId(seat, "seat");
+  const file = path.join(dir, "Duties", `${seat}.md`);
+  if (!(await exists(file))) return "";
+  const text = await readFile(file, "utf8");
+  return text.replace(/^---\n[\s\S]*?\n---\n*/, "").trim();
 }
 
 export async function saveSeatRequest(dir: string, base: "head" | "vp" | "pm", id: string, body: string, opencodeDir: string): Promise<string> {
@@ -332,6 +341,14 @@ function scalar(matterText: string, key: string): string {
   return match?.[1]?.trim() ?? "";
 }
 
+/** A declared tier wins. An older profile with none takes it from the id prefix. */
+function installedTier(id: string, declared: string): string {
+  if (declared.length > 0) return declared;
+  const prefix = id.split("-", 1)[0];
+  if (prefix === "head" || prefix === "vp" || prefix === "pm") return prefix;
+  return "";
+}
+
 function block(matterText: string, key: string): string {
   const lines = matterText.split("\n");
   const start = lines.findIndex((line) => line.startsWith(`${key}:`));
@@ -396,4 +413,115 @@ async function exists(file: string): Promise<boolean> {
 
 function isMissing(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+}
+
+const RECORD_NAMES = ["function.json", "client.json", "project.json", "queue.json"];
+const SCAN_SKIP = new Set(["node_modules", ".git", "Library", "Backups", "dist", "build", ".next", "target", "coverage", ".cache", ".venv", "Pods"]);
+const SCAN_DEPTH = 3;
+
+interface HomeMatch { path: string; depth: number }
+
+/**
+ * The folder owns the agent, as OpenChamber's home scan does. A `.meta` record
+ * names `agent_profile`. One folder for that profile opens that folder. Several
+ * folders open the head's folder, which is the one place that profile's domain lives.
+ */
+export async function listSeatFolders(root: string): Promise<Array<{ path: string; name: string; seat: string }>> {
+  const homes = await recordedHomes(root);
+  const folders: Array<{ path: string; name: string; seat: string }> = [];
+  for (const [seat, matches] of homes) {
+    if (!ID.test(seat)) continue;
+    for (const match of matches) {
+      folders.push({ path: match.path, name: path.basename(match.path), seat });
+    }
+  }
+  folders.sort((left, right) => left.name.localeCompare(right.name) || left.path.localeCompare(right.path));
+  return folders;
+}
+
+export async function folderForSeat(root: string, seatId: string): Promise<{ path: string; name: string; own: boolean } | null> {
+  if (!ID.test(seatId)) return null;
+  const homes = await recordedHomes(root);
+  const own = soleFolder(homes.get(seatId));
+  const stem = seatId.replace(/^(?:vp|pm)-/, "");
+  const head = stem === seatId ? null : soleFolder(homes.get(`head-${stem}`));
+  const folder = own ?? head;
+  if (!folder) return null;
+  return { path: folder, name: path.basename(folder), own: own === folder };
+}
+
+function soleFolder(matches: readonly HomeMatch[] | undefined): string | null {
+  if (!matches || matches.length === 0) return null;
+  const depth = Math.min(...matches.map((match) => match.depth));
+  const shallow = matches.filter((match) => match.depth === depth);
+  return shallow.length === 1 ? shallow[0].path : null;
+}
+
+let homeCache: { root: string; expires: number; homes: Map<string, HomeMatch[]> } | null = null;
+
+async function recordedHomes(root: string): Promise<Map<string, HomeMatch[]>> {
+  const canonical = await realpath(root);
+  if (homeCache && homeCache.root === canonical && homeCache.expires > Date.now()) return homeCache.homes;
+  const homes = new Map<string, HomeMatch[]>();
+  await walkHomes(canonical, canonical, 0, homes);
+  homeCache = { root: canonical, expires: Date.now() + 30_000, homes };
+  return homes;
+}
+
+async function walkHomes(root: string, directory: string, depth: number, homes: Map<string, HomeMatch[]>): Promise<void> {
+  const profile = await readProfile(directory);
+  if (profile && ID.test(profile)) {
+    const list = homes.get(profile);
+    const match = { path: directory, depth };
+    if (list) list.push(match);
+    else homes.set(profile, [match]);
+  }
+  if (depth >= SCAN_DEPTH) return;
+  let entries;
+  try {
+    entries = await readdir(directory, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith(".") || SCAN_SKIP.has(entry.name)) continue;
+    const next = path.join(directory, entry.name);
+    try {
+      if ((await lstat(next)).isSymbolicLink()) continue;
+    } catch {
+      continue;
+    }
+    if (!isWithin(root, next)) continue;
+    await walkHomes(root, next, depth + 1, homes);
+  }
+}
+
+async function readProfile(directory: string): Promise<string | null> {
+  const metadata = path.join(directory, ".meta");
+  let entries;
+  try {
+    if (!(await lstat(metadata)).isDirectory()) return null;
+    entries = await readdir(metadata, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  const records = entries.filter((entry) => RECORD_NAMES.includes(entry.name) && entry.isFile());
+  if (records.length !== 1) return null;
+  const record = records[0];
+  if (!record) return null;
+  const file = path.join(metadata, record.name);
+  try {
+    if ((await lstat(file)).size > 65_536) return null;
+    const parsed: unknown = JSON.parse(await readFile(file, "utf8"));
+    if (typeof parsed !== "object" || parsed === null || !("agent_profile" in parsed)) return null;
+    const profile = parsed.agent_profile;
+    return typeof profile === "string" ? profile.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function isWithin(root: string, target: string): boolean {
+  const relative = path.relative(root, target);
+  return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
 }

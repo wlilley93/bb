@@ -292,6 +292,9 @@ export function createAppUpdateService(
     available: SystemAppUpdateAvailable | null;
     blocked: SystemAppUpdateStatus["blocked"];
   }> => {
+    if (process.env.BOLTRIG_OFFICIAL_UPDATES !== "1") {
+      return { available: null, blocked: null };
+    }
     if (support.kind !== "supported" || args.launcher === null) {
       return { available: null, blocked: null };
     }

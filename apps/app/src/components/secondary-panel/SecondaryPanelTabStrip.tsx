@@ -482,7 +482,7 @@ export function SecondaryPanelTabStrip({
           <div
             ref={contentRef}
             data-secondary-panel-tab-content
-            className="flex w-max items-center gap-1"
+            className="flex w-max items-center gap-0"
           >
             {dndTabs}
           </div>
@@ -649,6 +649,7 @@ function PanelTab({
       isActive={isActive}
       onSelect={tab.onSelect}
       labelMaxWidthClass="max-w-[160px]"
+      appearance="editor"
       enlargeCloseTargetOnCoarsePointer={
         tab.tab.kind === "workspace-file-preview" ||
         tab.tab.kind === "host-file-preview" ||

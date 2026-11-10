@@ -8,11 +8,19 @@ import path from "node:path";
 import {
   CompanyDirectoryError,
   SHARED_ROOT_FILE,
+  companyDir,
   ensureCompanyDirectory,
+  addPermissionRequest,
+  folderForSeat,
   listInstalledSeats,
+  listSeatFolders,
+  listSopFiles,
+  readCanonDuty,
+  readCompanyFile,
   readSharedRoot,
   renderThenRestart,
   saveCanonDuty,
+  saveCompanyFile,
   saveRole,
   saveSeatRequest,
   writeSharedRoot,
@@ -30,6 +38,17 @@ export const agentEditorRpc = defineRpcContract({
     input: layoutInput,
     output: z.object({ root: z.string(), companyDir: z.string(), reason: z.string() }).strict(),
   },
+  home: {
+    input: z.object({ seat: z.string() }).strict(),
+    output: z.object({ path: z.string().nullable(), name: z.string().nullable(), own: z.boolean() }).strict(),
+  },
+  folders: {
+    input: z.null(),
+    output: z.object({
+      folders: z.array(z.object({ path: z.string(), name: z.string(), seat: z.string() }).strict()),
+      company: z.string(),
+    }).strict(),
+  },
   seats: {
     input: z.null(),
     output: z.object({
@@ -43,6 +62,10 @@ export const agentEditorRpc = defineRpcContract({
         reach: z.string(),
       }).strict()),
     }).strict(),
+  },
+  readDuty: {
+    input: z.object({ seat: z.string() }).strict(),
+    output: z.object({ body: z.string() }).strict(),
   },
   saveDuty: {
     input: z.object({ seat: z.string(), body: z.string() }).strict(),
@@ -60,6 +83,31 @@ export const agentEditorRpc = defineRpcContract({
     input: z.null(),
     output: z.object({ ready: z.boolean(), restarted: z.boolean(), reason: z.string() }).strict(),
   },
+  files: {
+    input: z.null(),
+    output: z.object({
+      files: z.array(z.object({ path: z.string(), title: z.string() }).strict()),
+    }).strict(),
+  },
+  readFile: {
+    input: z.object({ path: z.string() }).strict(),
+    output: z.object({ path: z.string(), body: z.string() }).strict(),
+  },
+  saveFile: {
+    input: z.object({ path: z.string(), body: z.string() }).strict(),
+    output: z.object({ path: z.string() }).strict(),
+  },
+  addPermission: {
+    input: z.object({
+      id: z.string(),
+      rule: z.string(),
+      reason: z.string(),
+      layer: z.string(),
+      gap: z.string(),
+      owner: z.string(),
+    }).strict(),
+    output: z.object({ path: z.string() }).strict(),
+  },
 });
 
 export interface AgentEditorOptions {
@@ -71,27 +119,11 @@ function fail(error: unknown): never {
 }
 
 export function registerAgentEditor(bb: BbPluginApi, options: AgentEditorOptions): void {
-  const settings = bb.settings.define({
-    companyRoot: {
-      type: "string",
-      label: "Company root",
-      description: "The folder whose Agent Operations directory these editors read. It may be the copy on this server, or a SharePoint or Box folder that rsync keeps in step. There is no agent mapping step.",
-    },
-  });
-  settings.onChange((next) => {
-    const root = next.companyRoot;
-    if (typeof root === "string" && root.length > 0) {
-      void writeSharedRoot(root, options.layout.rootFile).catch((error: unknown) => {
-        bb.log.warn(error instanceof Error ? error.message : String(error));
-      });
-    }
-  });
+  const today = new Date().toISOString().slice(0, 10);
 
   async function root(): Promise<string> {
     const shared = await readSharedRoot(options.layout.rootFile);
     if (shared) return shared;
-    const fromSettings = (await settings.get()).companyRoot;
-    if (typeof fromSettings === "string" && fromSettings.length > 0) return fromSettings;
     throw new CompanyDirectoryError("Choose a company root first.");
   }
 
@@ -109,6 +141,23 @@ export function registerAgentEditor(bb: BbPluginApi, options: AgentEditorOptions
       });
       if (!rendered.ready) throw new CompanyDirectoryError(rendered.reason);
       return { root: canonical, companyDir, reason: rendered.reason };
+    },
+    readDuty: async ({ seat }) => {
+      const shared = await readSharedRoot(options.layout.rootFile);
+      if (!shared) return { body: "" };
+      const dir = await ensureCompanyDirectory(shared, options.layout.packDir).catch(fail);
+      return { body: await readCanonDuty(dir, seat).catch(fail) };
+    },
+    home: async ({ seat }) => {
+      const shared = await readSharedRoot(options.layout.rootFile);
+      const folder = shared ? await folderForSeat(shared, seat).catch(() => null) : null;
+      return { path: folder?.path ?? null, name: folder?.name ?? null, own: folder?.own ?? false };
+    },
+    folders: async () => {
+      const shared = await readSharedRoot(options.layout.rootFile);
+      const folders = shared ? await listSeatFolders(shared).catch(() => []) : [];
+      const company = shared ? path.basename(companyDir(shared)) : "";
+      return { folders, company };
     },
     seats: async () => listInstalledSeats(options.layout.opencodeDir),
     saveDuty: async ({ seat, body }) => {
@@ -133,6 +182,19 @@ export function registerAgentEditor(bb: BbPluginApi, options: AgentEditorOptions
         configPackage: options.layout.configPackage,
         restartCommand: process.env.BOLTRIG_OPENCODE_RESTART?.split(" ").filter(Boolean),
       });
+    },
+    files: async () => ({ files: await listSopFiles(await ensureCompanyDirectory(await root(), options.layout.packDir).catch(fail)) }),
+    readFile: async ({ path: relative }) => ({
+      path: relative,
+      body: await readCompanyFile(await ensureCompanyDirectory(await root(), options.layout.packDir).catch(fail), relative).catch(fail),
+    }),
+    saveFile: async ({ path: relative, body }) => {
+      await saveCompanyFile(await ensureCompanyDirectory(await root(), options.layout.packDir).catch(fail), relative, body, today).catch(fail);
+      return { path: relative };
+    },
+    addPermission: async (row) => {
+      await addPermissionRequest(await ensureCompanyDirectory(await root(), options.layout.packDir).catch(fail), row, today).catch(fail);
+      return { path: "policies/POLICY-REGISTER.md" };
     },
   });
 }

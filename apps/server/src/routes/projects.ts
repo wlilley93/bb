@@ -19,9 +19,15 @@ import {
   listProjectExecutionDefaultsByProjectIds,
   listPublicProjects,
   listProjectSourcesByProjectIds,
+  listSeatPrimaries,
   listThreadSections,
   listThreadsWithPendingInteractionStateForProjects,
   reorderProject,
+  setSeatPrimary,
+  SeatPrimaryError,
+  ProjectParentError,
+  assertProjectParent,
+  projectHasLiveChildren,
   updateProject,
   updateProjectSource,
   setProjectGitRemoteUrlIfMissing,
@@ -40,7 +46,10 @@ import {
 } from "@bb/server-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
-import { COMMAND_TIMEOUT_MS } from "../constants.js";
+import {
+  COMMAND_TIMEOUT_MS,
+  PATH_TYPEAHEAD_TIMEOUT_MS,
+} from "../constants.js";
 import { ApiError } from "../errors.js";
 import { readMultipartFormData } from "./multipart-form-data.js";
 import {
@@ -112,6 +121,24 @@ import {
 
 type ProjectResponseProjectFields = Omit<ProjectResponse, "sources">;
 
+function parentError(error: ProjectParentError): ApiError {
+  const message = error.reason === "cycle"
+    ? "A seat cannot sit under itself."
+    : error.reason === "personal"
+      ? "The personal project is not a seat."
+      : "That parent seat does not exist.";
+  return new ApiError(409, "invalid_request", message);
+}
+
+function primaryError(error: SeatPrimaryError): ApiError {
+  const message = error.reason === "subagent"
+    ? "A subagent is not the thread a seat opens."
+    : error.reason === "other-seat"
+      ? "That thread belongs to another seat."
+      : "That thread does not exist.";
+  return new ApiError(409, "invalid_request", message);
+}
+
 function toProjectResponseProjectFields(
   project: ProjectResponseProjectFields,
 ): ProjectResponseProjectFields {
@@ -120,6 +147,7 @@ function toProjectResponseProjectFields(
     kind: project.kind,
     name: project.name,
     gitRemoteUrl: project.gitRemoteUrl,
+    parentProjectId: project.parentProjectId ?? null,
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
   };
@@ -145,10 +173,16 @@ function buildProjectResponsesFromRows(
     sourcesByProjectId.set(source.projectId, [source]);
   }
 
-  return projects.map((project) => ({
-    ...toProjectResponseProjectFields(project),
-    sources: sourcesByProjectId.get(project.id) ?? [],
-  }));
+  const primaries = listSeatPrimaries(deps.db, projects.map((project) => project.id));
+  return projects.map((project) => {
+    const primary = primaries.get(project.id);
+    return {
+      ...toProjectResponseProjectFields(project),
+      primaryThreadId: primary?.threadId ?? null,
+      previousPrimaryThreadId: primary?.previousThreadId ?? null,
+      sources: sourcesByProjectId.get(project.id) ?? [],
+    };
+  });
 }
 
 function buildProjectResponses(
@@ -454,14 +488,23 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
       );
     }
     const gitRemoteUrl = await inspectProjectGitRemoteBestEffort(deps, source);
-    const { project } = findOrCreateProjectByLocalPathSource(
-      deps.db,
-      deps.hub,
-      {
-        name: payload.name,
-        source,
-      },
-    );
+    let project;
+    try {
+      ({ project } = findOrCreateProjectByLocalPathSource(
+        deps.db,
+        deps.hub,
+        {
+          name: payload.name,
+          source,
+          ...(payload.parentProjectId !== undefined
+            ? { parentProjectId: payload.parentProjectId }
+            : {}),
+        },
+      ));
+    } catch (error) {
+      if (error instanceof ProjectParentError) throw parentError(error);
+      throw error;
+    }
     if (gitRemoteUrl !== null) {
       setProjectGitRemoteUrlIfMissing(
         deps.db,
@@ -506,17 +549,33 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
   });
 
   patch(routes.update, async (context, payload) => {
-    requirePublicStandardProject(deps.db, context.req.param("id"));
-    const project = updateProject(
-      deps.db,
-      deps.hub,
-      context.req.param("id"),
-      payload,
-    );
-    if (!project) {
-      throw new ApiError(404, "project_not_found", "Project not found");
+    const id = context.req.param("id");
+    requirePublicStandardProject(deps.db, id);
+    try {
+      if (payload.parentProjectId !== undefined) {
+        assertProjectParent(deps.db, id, payload.parentProjectId);
+      }
+      if (payload.primaryThreadId !== undefined) {
+        setSeatPrimary(deps.db, id, payload.primaryThreadId);
+        deps.hub.notifyProject(id, ["project-updated"]);
+      }
+    } catch (error) {
+      if (error instanceof ProjectParentError) throw parentError(error);
+      if (error instanceof SeatPrimaryError) throw primaryError(error);
+      throw error;
     }
-    return context.json(buildProjectResponses(deps, project.id)[0]);
+    if (payload.name !== undefined || payload.parentProjectId !== undefined) {
+      const project = updateProject(deps.db, deps.hub, id, {
+        ...(payload.name !== undefined ? { name: payload.name } : {}),
+        ...(payload.parentProjectId !== undefined
+          ? { parentProjectId: payload.parentProjectId }
+          : {}),
+      });
+      if (!project) {
+        throw new ApiError(404, "project_not_found", "Project not found");
+      }
+    }
+    return context.json(buildProjectResponses(deps, id)[0]);
   });
 
   patch(routes.reorder, async (context, payload) => {
@@ -544,6 +603,13 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
         409,
         "invalid_request",
         "The personal project cannot be deleted",
+      );
+    }
+    if (projectHasLiveChildren(deps.db, id)) {
+      throw new ApiError(
+        409,
+        "invalid_request",
+        "This seat still has seats under it.",
       );
     }
     beginProjectDeletion(deps, { projectId: id });
@@ -718,7 +784,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     const result = await callHostRetryableOnlineRpc(deps, {
       hostId: target.hostId,
       signal: context.req.raw.signal,
-      timeoutMs: COMMAND_TIMEOUT_MS,
+      timeoutMs: PATH_TYPEAHEAD_TIMEOUT_MS,
       command: {
         type: "host.list_paths",
         path: target.path,

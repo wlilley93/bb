@@ -187,6 +187,7 @@ beforeEach(async () => {
   resetPluginFrontendBootStateForTest();
   markPluginFrontendsSettled();
   window.localStorage.clear();
+  window.localStorage.setItem("boltrig.sidebar.top.v1", "1");
   registerDocs();
   await registerNavigationPlugin();
 });
@@ -215,8 +216,8 @@ describe("SidebarNavigationList", () => {
         .getAllByRole("menuitem")
         .map((item) => item.textContent),
     ).toEqual([
-      "New thread",
-      "Search threads",
+      "New",
+      "Search",
       "Skills",
       "Customize navigation",
     ]);
@@ -229,7 +230,7 @@ describe("SidebarNavigationList", () => {
     expect(destinations.className).toContain("overflow-y-auto");
     expect(
       rowButtons(destinations).map((button) => button.textContent),
-    ).toEqual(["New thread", "Plugins", "Skills", "Docs"]);
+    ).toEqual(["New", "Search", "Plugins", "Skills", "Docs"]);
     const more = within(list()).getByRole("button", { name: "More" });
     expect(destinations.contains(more)).toBe(false);
   });
@@ -246,10 +247,10 @@ describe("SidebarNavigationList", () => {
     );
     const editor = await screen.findByTestId("sidebar-navigation-customize");
     fireEvent.click(
-      within(editor).getByRole("checkbox", { name: /New thread/u }),
+      within(editor).getByRole("checkbox", { name: "Show New in sidebar" }),
     );
 
-    expect(rowLabels()).toEqual(["Plugins", "Skills", "Docs", "More"]);
+    expect(rowLabels()).toEqual(["Search", "Plugins", "Skills", "Docs", "More"]);
     expect(store.get(pluginNavVisiblePanelKeysAtom)).not.toContain(
       "__bb__/new-thread",
     );
@@ -324,12 +325,12 @@ describe("SidebarNavigationList", () => {
     expect(document.activeElement).toBe(more);
   });
 
-  it("hides More when nothing is hidden", () => {
+  it("keeps More when every destination is visible", () => {
     renderList(THREAD_PATH, {
       visibleKeys: ALL_KEYS,
     });
 
-    expect(rowLabels()).not.toContain("More");
+    expect(rowLabels()).toContain("More");
   });
 
   it("opens a row's options from its menu button and customizes from there", async () => {

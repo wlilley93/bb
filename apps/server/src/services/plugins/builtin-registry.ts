@@ -118,7 +118,7 @@ export const BUILTIN_PLUGINS = [
   {
     name: "pdf-preview",
     pluginId: "pdf-preview",
-    defaultEnabled: true,
+    defaultEnabled: false,
   },
   {
     name: "provider-codex",
@@ -231,16 +231,6 @@ export const BUILTIN_PLUGINS = [
     defaultEnabled: false,
   },
   {
-    name: "agent-editor",
-    pluginId: "bb--agent-editor",
-    defaultEnabled: true,
-  },
-  {
-    name: "company-sop-editor",
-    pluginId: "bb--company-sop-editor",
-    defaultEnabled: true,
-  },
-  {
     name: "composer",
     pluginId: "bb--composer",
     defaultEnabled: true,
@@ -248,6 +238,21 @@ export const BUILTIN_PLUGINS = [
   {
     name: "github-star",
     pluginId: "bb--github-star",
+    defaultEnabled: true,
+  },
+  {
+    name: "agent-editor",
+    pluginId: "bb--agent-editor",
+    defaultEnabled: true,
+  },
+  {
+    name: "office",
+    pluginId: "bb--office",
+    defaultEnabled: true,
+  },
+  {
+    name: "company-linear",
+    pluginId: "bb--company-linear",
     defaultEnabled: true,
   },
 ].map((plugin): BundledPluginDefinition => ({

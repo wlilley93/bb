@@ -54,6 +54,10 @@ import {
 } from "@bb/shared-ui/context-selection";
 import { usePaneContext } from "./PaneContext";
 import { PaneMaximizeButton } from "./PaneMaximizeButton";
+import {
+  WorkspaceWindowButtons,
+  type WorkspaceWindowButtonsProps,
+} from "@/components/secondary-panel/WorkspaceWindowButtons";
 
 const THREAD_HEADER_ACTION_BUTTON_CLASS = cn(
   COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS,
@@ -78,6 +82,7 @@ interface ThreadDetailHeaderProps {
   thread: PluginThreadActionTarget;
   threadTitle: string;
   workspaceOpenButton?: ReactNode;
+  workspaceWindows?: WorkspaceWindowButtonsProps | null;
 }
 
 export function ThreadDetailHeader({
@@ -89,6 +94,7 @@ export function ThreadDetailHeader({
   thread,
   threadTitle,
   workspaceOpenButton,
+  workspaceWindows = null,
   contextCardButton,
 }: ThreadDetailHeaderProps) {
   const isCompactViewport = useIsCompactViewport();
@@ -326,6 +332,9 @@ export function ThreadDetailHeader({
               className={RIGHT_PANEL_TOGGLE_SHORTCUT_HINT_CLASS}
             />
           </Button>
+        ) : null}
+        {workspaceWindows ? (
+          <WorkspaceWindowButtons {...workspaceWindows} />
         ) : null}
         {reservesWindowPanelToggle && !isWindowPanelOpen ? (
           <span

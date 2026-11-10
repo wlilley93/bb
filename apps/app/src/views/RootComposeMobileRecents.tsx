@@ -68,7 +68,7 @@ interface GetMobileRecentThreadsArgs {
 interface MobileRecentThreadRowProps {
   highlighted: boolean;
   onToggleCollapsed: (threadId: string) => void;
-  projectName: string | null;
+  placeName: string | null;
   provider: ProviderInfo | null;
   row: MobileRecentThreadRow;
 }
@@ -86,11 +86,11 @@ function repeatsProjectName(
 
 function getMobileRecentThreadMetadata({
   environmentProviderLookup,
-  projectName,
+  placeName,
   thread,
 }: {
   environmentProviderLookup: EnvironmentDisplayProviderLookup;
-  projectName: string | null;
+  placeName: string | null;
   thread: ThreadListEntry;
 }): string {
   const workspaceName = resolveEnvironmentDisplayName(
@@ -103,8 +103,8 @@ function getMobileRecentThreadMetadata({
     environmentProviderLookup,
   );
   return [
-    projectName,
-    workspaceName !== null && repeatsProjectName(workspaceName, projectName)
+    placeName,
+    workspaceName !== null && repeatsProjectName(workspaceName, placeName)
       ? null
       : workspaceName,
     formatRelativeTime({
@@ -117,6 +117,8 @@ function getMobileRecentThreadMetadata({
 }
 
 interface RootComposeMobileRecentsProps {
+  agentLabelsByThreadId?: ReadonlyMap<string, string>;
+  agentModeByThreadId?: ReadonlyMap<string, string | null>;
   highlightedThreadId: string | null;
   projectNamesById: ReadonlyMap<string, string>;
   providersById: ReadonlyMap<string, ProviderInfo>;
@@ -238,7 +240,7 @@ export function getMobileRecentThreads({
 function MobileRecentThreadRow({
   highlighted,
   onToggleCollapsed,
-  projectName,
+  placeName,
   provider,
   row,
 }: MobileRecentThreadRowProps) {
@@ -267,7 +269,7 @@ function MobileRecentThreadRow({
   );
   const metadataText = getMobileRecentThreadMetadata({
     environmentProviderLookup,
-    projectName,
+    placeName,
     thread,
   });
   const workspaceIconName = getEnvironmentDisplayIconName(
@@ -400,6 +402,8 @@ function MobileRecentThreadRow({
 }
 
 export function RootComposeMobileRecents({
+  agentLabelsByThreadId,
+  agentModeByThreadId,
   highlightedThreadId,
   projectNamesById,
   providersById,
@@ -499,10 +503,13 @@ export function RootComposeMobileRecents({
               highlighted={row.thread.id === highlightedThreadId}
               onToggleCollapsed={toggleCollapsed}
               provider={providersById.get(row.thread.providerId) ?? null}
-              projectName={
-                isProjectlessProjectId(row.thread.projectId)
+              placeName={
+                agentLabelsByThreadId?.get(
+                  agentModeByThreadId?.get(row.thread.id) ?? "",
+                ) ??
+                (isProjectlessProjectId(row.thread.projectId)
                   ? null
-                  : (projectNamesById.get(row.thread.projectId) ?? null)
+                  : (projectNamesById.get(row.thread.projectId) ?? null))
               }
               row={row}
             />

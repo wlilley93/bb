@@ -19,10 +19,14 @@ panel's file search, and `bb thread open`.
 - **Find in file** with <kbd>⌘F</kbd>, plus Monaco's usual editing: multiple
   cursors, block selection, bracket matching, code folding.
 - **Syntax highlighting** for ~86 common file types.
-- **File tree.** Toggle it from the file bar to browse the project, filter by
-  path, expand and collapse directories, and jump to another file. It opens
-  with the current file revealed. Right-click any row to copy its absolute
-  path, relative path, or filename.
+- **File tree.** It sits on the left and opens with the file. Hide it from the
+  file bar, filter by path, expand and collapse directories, and jump to
+  another file. The current file is revealed. Drag the right edge to resize
+  the tree. Right-click any row to copy its absolute path, relative path, or
+  filename.
+- **Tabs.** Each file you open stays in a tab above the editor. A dot on the
+  active tab means unsaved edits. Closing that tab, or opening another file,
+  asks you to discard those edits.
 - **Quick palette commands.** Open the quick palette (<kbd>⌘⇧P</kbd>) and
   type "fold", "sort", or "copy" to reach *fold level 1–5*, *fold
   recursively*, *unfold all*, *unfold recursively*, *unfold at cursor*,

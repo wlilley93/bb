@@ -48,26 +48,16 @@ import {
   type ProjectMachineSetupCompletion,
   type ProjectMachineSetupDialogTarget,
 } from "@/components/dialogs/ProjectMachineSetupDialog";
-import {
-  RIGHT_PANEL_TOGGLE_BUTTON_CLASS,
-  RIGHT_PANEL_TOGGLE_ICON_NAME,
-  RIGHT_PANEL_TOGGLE_SHORTCUT_HINT_CLASS,
-} from "@/components/secondary-panel/panelToggleControlState";
-import { AppCommandShortcutHint } from "@/components/commands/AppCommandShortcutHint";
 import type {
   SecondaryPanelFixedTab,
   SecondaryPanelPaneRenderContext,
   SecondaryPanelRenderableTab,
 } from "@/components/secondary-panel/ThreadSecondaryPanel";
-import {
-  LazyBrowserTabDeck,
-  preloadThreadSecondaryPanel,
-} from "@/components/secondary-panel/lazySecondaryPanelComponents";
+import { LazyBrowserTabDeck } from "@/components/secondary-panel/lazySecondaryPanelComponents";
+import { WorkspaceWindowButtons } from "@/components/secondary-panel/WorkspaceWindowButtons";
+import { useWorkspaceWindowActions } from "@/components/secondary-panel/workspaceWindowRequest";
 import { EmptyStatePanel } from "@bb/shared-ui/empty-state";
-import { Icon } from "@bb/shared-ui/icon";
-import { cn } from "@bb/shared-ui/lib/utils";
 import { PageShell } from "@/components/ui/page-shell.js";
-import { Button } from "@bb/shared-ui/button";
 import { useIsCompactViewport } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { usePointerCoarse } from "@bb/shared-ui/hooks/use-pointer-coarse";
 import {
@@ -119,11 +109,11 @@ import { UrlOpenRoutingProvider } from "@/lib/url-open-routing";
 import { AppNavigationHostProvider } from "@/lib/app-navigation-host";
 import { useAppPanelController } from "@/lib/app-fixed-tab-navigation";
 import { useRootComposeProjectId } from "@/lib/root-compose-selection";
-import {
-  RootComposeSecondaryContent,
-  useRootComposePinnedPanelToggleBoxClassName,
-} from "./RootComposeSecondaryContent";
+import { RootComposeSecondaryContent } from "./RootComposeSecondaryContent";
+import { threadsInAgentTree } from "@/lib/agent-tree";
 import { RootComposeMobileRecents } from "./RootComposeMobileRecents";
+import { usePublishedAgentTree } from "./usePublishedAgentTree";
+import { useThreadAgentModes } from "./useThreadAgentModes";
 import {
   shouldLoadThreadStorageFileList,
   useThreadStorageViewer,
@@ -146,10 +136,7 @@ import {
   useThreadSecondaryPanelDrawerVisibility,
   useThreadSecondaryPanelVisibility,
 } from "./thread-detail/useThreadSecondaryPanelVisibility";
-import {
-  useAppCommandHandler,
-  useAppCommandShortcut,
-} from "@/components/commands/AppCommandProvider";
+import { useAppCommandHandler } from "@/components/commands/AppCommandProvider";
 import {
   useOptionalPaneContext,
   usePaneContext,
@@ -211,6 +198,10 @@ export function shouldStartComposingFromLocationState(state: unknown): boolean {
 }
 
 interface BuildMobileRecentThreadsArgs {
+  agentId?: string | null;
+  agentModeByThreadId?: ReadonlyMap<string, string | null>;
+  agentSeatIds?: readonly string[];
+  agentTreeIds?: ReadonlySet<string> | null;
   sidebarNavigation: SidebarBootstrapResponse | undefined;
 }
 
@@ -225,44 +216,6 @@ interface BuildRootComposeTerminalSessionsArgs {
   environmentTerminalSessions: readonly TerminalSession[] | undefined;
   globalTerminalSessions: readonly TerminalSession[] | undefined;
   terminalTarget: RootComposeTerminalTarget | null;
-}
-
-interface RootComposeRightPanelToggleProps {
-  isOpen: boolean;
-  onToggle: () => void;
-}
-
-export function RootComposeRightPanelToggle({
-  isOpen,
-  onToggle,
-}: RootComposeRightPanelToggleProps) {
-  const shortcut = useAppCommandShortcut("panel.toggle");
-  const rightPanelLabel = isOpen ? "Hide right panel" : "Show right panel";
-  const rightPanelIconName = RIGHT_PANEL_TOGGLE_ICON_NAME;
-
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      className={cn(RIGHT_PANEL_TOGGLE_BUTTON_CLASS, "relative")}
-      aria-label={
-        shortcut ? `${rightPanelLabel} (${shortcut.label})` : rightPanelLabel
-      }
-      aria-keyshortcuts={shortcut?.ariaKeyshortcuts}
-      aria-expanded={isOpen}
-      onPointerEnter={preloadThreadSecondaryPanel}
-      onFocus={preloadThreadSecondaryPanel}
-      onPointerDown={preloadThreadSecondaryPanel}
-      onClick={onToggle}
-    >
-      <Icon name={rightPanelIconName} />
-      <AppCommandShortcutHint
-        shortcut={shortcut}
-        className={RIGHT_PANEL_TOGGLE_SHORTCUT_HINT_CLASS}
-      />
-    </Button>
-  );
 }
 
 function readReuseEnvironmentIdFromLocationState(
@@ -306,6 +259,13 @@ export function hasSingleUseRootComposeTargetState(state: unknown): boolean {
   );
 }
 
+/** The seat whose OpenCode agent this home runs as. Absent on a plain new thread. */
+export function readAgentFromLocationState(state: unknown): string | null {
+  if (!state || typeof state !== "object") return null;
+  const agent = (state as { agent?: unknown }).agent;
+  return typeof agent === "string" && agent.length > 0 ? agent : null;
+}
+
 export function readInitialPromptFromLocationState(
   state: unknown,
 ): string | null {
@@ -327,6 +287,10 @@ export function shouldReplaceInitialPromptFromLocationState(
 }
 
 export function buildMobileRecentThreads({
+  agentId = null,
+  agentModeByThreadId,
+  agentSeatIds = [],
+  agentTreeIds = null,
   sidebarNavigation,
 }: BuildMobileRecentThreadsArgs): ThreadListEntry[] {
   if (!sidebarNavigation) return [];
@@ -337,7 +301,13 @@ export function buildMobileRecentThreads({
   for (const project of sidebarNavigation.projects) {
     threads.push(...project.threads);
   }
-  return threads;
+  if (agentId === null || agentId.length === 0) return threads;
+  return threadsInAgentTree(threads, {
+    agentId,
+    modeByThreadId: agentModeByThreadId ?? new Map(),
+    seatIds: agentSeatIds,
+    treeIds: agentTreeIds,
+  });
 }
 
 export function canCreateRootComposeTerminal({
@@ -394,6 +364,8 @@ export function buildRootComposeTerminalSessions({
 }
 
 export function RootComposeView() {
+  const location = useLocation();
+  const agent = readAgentFromLocationState(location.state);
   const { navigateInPane } = usePaneContext();
   const [rootComposeProjectId, setRootComposeProjectId] =
     useRootComposeProjectId();
@@ -434,6 +406,7 @@ export function RootComposeView() {
       onProjectChange={setRootComposeProjectId}
       draftStorage={{ kind: "new-thread" }}
       selectionScope="new-thread"
+      seed={agent ? { agent } : undefined}
       preferReadyProviderWhenUnset
       onSubmit={handleSubmit}
     >
@@ -636,9 +609,32 @@ function RootComposeSurface({
     return () => window.cancelAnimationFrame(handle);
   }, [focusPromptBox, isPointerCoarse, location.key, shouldFocusPrompt]);
 
-  const mobileRecentThreads = useMemo(
+  const mobileRecentCandidates = useMemo(
     () => buildMobileRecentThreads({ sidebarNavigation }),
     [sidebarNavigation],
+  );
+  const agentMode = composer.agentMode;
+  const publishedAgentTree = usePublishedAgentTree(agentMode);
+  const agentModesByThreadId = useThreadAgentModes(
+    mobileRecentCandidates.map((thread) => thread.id),
+    agentMode !== null,
+  );
+  const mobileRecentThreads = useMemo(
+    () =>
+      buildMobileRecentThreads({
+        agentId: agentMode,
+        agentModeByThreadId: agentModesByThreadId,
+        agentSeatIds: composer.agentSeatIds,
+        agentTreeIds: publishedAgentTree,
+        sidebarNavigation,
+      }),
+    [
+      agentMode,
+      agentModesByThreadId,
+      composer.agentSeatIds,
+      publishedAgentTree,
+      sidebarNavigation,
+    ],
   );
   const systemProviders = useSystemProviders().data;
   const mobileRecentProvidersById = useMemo(() => {
@@ -1124,6 +1120,14 @@ function RootComposeSurface({
     reveal: openCompactDrawer,
     onCloseLastTab: secondaryPanelDrawerVisibility.closeDrawer,
   });
+  const workspaceWindows = useWorkspaceWindowActions({
+    activateTab,
+    onFilesOpened: () => setShouldAutoFocusNewTab(true),
+    openTab,
+    reveal: openCompactDrawer,
+    startTerminal: terminals.start,
+    tabs: syncedOrderedSecondaryFileTabs,
+  });
   const appNavigationCapabilities = useMemo(
     () => ({
       openFilePreview: openLiveFilePreview,
@@ -1273,24 +1277,16 @@ function RootComposeSurface({
     },
     [openWorkspaceFile],
   );
-  const pinnedPanelToggleBoxClassName =
-    useRootComposePinnedPanelToggleBoxClassName();
-  const showPinnedToggle =
-    (paneContext?.secondaryPanelHost ?? null) === null &&
-    (!isSecondaryPanelOpen || isCompactViewport);
-  const rootPanelToggle = showPinnedToggle ? (
-    <div
-      className={cn(
-        "z-40",
-        pinnedPanelToggleBoxClassName,
-        isSecondaryPanelOpen && "pointer-events-none invisible",
-      )}
-    >
-      <RootComposeRightPanelToggle
-        isOpen={isSecondaryPanelOpen}
-        onToggle={handleToggleSecondaryPanel}
-      />
-    </div>
+  const showWorkspaceWindows =
+    (paneContext?.secondaryPanelHost ?? null) === null;
+  const workspaceWindowActions = showWorkspaceWindows ? (
+    <WorkspaceWindowButtons
+      browserDisabled={!isDesktopBrowserAvailable()}
+      onBrowser={workspaceWindows.openBrowser}
+      onFiles={workspaceWindows.openFiles}
+      onTerminal={workspaceWindows.openTerminal}
+      terminalDisabled={!terminals.canStart}
+    />
   ) : null;
   const [machineSetupTarget, setMachineSetupTarget] =
     useState<ProjectMachineSetupDialogTarget | null>(null);
@@ -1416,7 +1412,6 @@ function RootComposeSurface({
         onToggle={handleToggleSecondaryPanel}
       />
       {machineSetupDialog}
-      {rootPanelToggle}
       <PluginComposerHostProvider value={pluginComposerHost}>
         <AttachmentOpenerContext.Provider value={openAttachment}>
           <UrlOpenRoutingProvider openInAppBrowser={openBrowser}>
@@ -1436,6 +1431,8 @@ function RootComposeSurface({
                 isCompactHomeLayout={isCompactViewport}
                 compactScrollContent={
                   <RootComposeMobileRecents
+                    agentLabelsByThreadId={composer.agentLabels}
+                    agentModeByThreadId={agentModesByThreadId}
                     highlightedThreadId={lastCreatedThreadId}
                     projectNamesById={mobileRecentProjectNamesById}
                     providersById={mobileRecentProvidersById}
@@ -1445,6 +1442,7 @@ function RootComposeSurface({
                 }
                 isSecondaryPanelOpen={isSecondaryPanelOpen}
                 onToggleSecondaryPanel={handleToggleSecondaryPanel}
+                windowActions={workspaceWindowActions}
                 secondaryPanel={{
                   activeTab: activeFixedSecondaryTab,
                   environmentId: rootPanelEnvironmentId ?? undefined,

@@ -228,6 +228,7 @@ export function MobilePanelTabPager({
               >
                 <TabPill
                   compact
+                  appearance="editor"
                   label={displayedTab.label}
                   ariaLabel={displayedTab.ariaLabel}
                   leadingVisual={displayedTab.leadingVisual}

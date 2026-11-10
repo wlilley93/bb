@@ -2174,6 +2174,12 @@ function ProjectRowComponent({
   const handleProjectRowToggle = useCallback(() => {
     onToggleProjectCollapsed(project.id);
   }, [onToggleProjectCollapsed, project.id]);
+  const navigate = useBbNavigate();
+  const openSeat = useCallback(() => {
+    onProjectSelect?.();
+    if (project.primaryThreadId) navigate.toThread(project.primaryThreadId);
+    else navigate.toProject(project.id);
+  }, [navigate, onProjectSelect, project.id, project.primaryThreadId]);
   const handleCreateThread = useCallback(() => {
     onCreateProjectThread?.(project.id);
   }, [onCreateProjectThread, project.id]);
@@ -2232,6 +2238,7 @@ function ProjectRowComponent({
         >
           <TopLevelSidebarSection
             label={project.name}
+            onLabelActivate={openSeat}
             dropParentKey={buildSidebarEntitySectionId("project", project.id)}
             labelEditor={rename.editor}
             onRename={rename.startEditingFromDoubleClick}

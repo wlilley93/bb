@@ -11,6 +11,7 @@ export const projectSchema = z.object({
   kind: projectKindSchema,
   name: z.string(),
   gitRemoteUrl: z.string().nullable(),
+  parentProjectId: z.string().nullable().optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });

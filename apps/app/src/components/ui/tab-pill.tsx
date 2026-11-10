@@ -10,7 +10,7 @@ const TAB_PILL_DEFAULT_LABEL_MAX_WIDTH_CLASS = "max-w-[180px]";
 const TAB_PILL_AFFORDANCE_BUTTON_BASE_CLASS =
   "inline-flex size-4 shrink-0 items-center justify-center rounded-sm hover:bg-muted-foreground/15 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none max-md:pointer-coarse:size-5";
 const TAB_PILL_AFFORDANCE_ICON_CLASS = "size-3.5 max-md:pointer-coarse:size-5";
-const TAB_PILL_CLOSE_BUTTON_CLASS = `pointer-events-none absolute left-1.5 top-1/2 z-10 -translate-y-1/2 ${TAB_PILL_AFFORDANCE_BUTTON_BASE_CLASS} opacity-0 hover:opacity-100 group-hover/tab-pill:pointer-events-auto group-hover/tab-pill:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 disabled:opacity-30 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100`;
+const TAB_PILL_CLOSE_BUTTON_CLASS = `pointer-events-none absolute top-1/2 z-10 -translate-y-1/2 ${TAB_PILL_AFFORDANCE_BUTTON_BASE_CLASS} opacity-0 hover:opacity-100 group-hover/tab-pill:pointer-events-auto group-hover/tab-pill:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 disabled:opacity-30 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100`;
 const TAB_PILL_LARGE_COARSE_POINTER_CLOSE_BUTTON_CLASS =
   "max-md:pointer-coarse:min-h-9 max-md:pointer-coarse:min-w-9";
 const TAB_PILL_LEADING_VISUAL_CLASS =
@@ -36,6 +36,7 @@ interface TabPillProps {
   labelMaxWidthClass?: string;
   closeAction: TabPillCloseAction | null;
   enlargeCloseTargetOnCoarsePointer?: boolean;
+  appearance?: "pill" | "editor";
 }
 
 export function TabPill({
@@ -52,10 +53,13 @@ export function TabPill({
   labelMaxWidthClass = TAB_PILL_DEFAULT_LABEL_MAX_WIDTH_CLASS,
   closeAction,
   enlargeCloseTargetOnCoarsePointer = false,
+  appearance = "pill",
 }: TabPillProps) {
+  const editor = appearance === "editor";
   return (
     <div
       data-tab-pill=""
+      data-tab-appearance={appearance}
       onAuxClick={(event) => {
         if (event.button !== 1 || closeAction === null) {
           return;
@@ -65,12 +69,19 @@ export function TabPill({
         closeAction.onClose();
       }}
       className={cn(
-        `group/tab-pill relative inline-flex h-7 shrink-0 items-center rounded-md ${LIST_HOVER_TRANSITION} max-md:pointer-coarse:h-9`,
+        `group/tab-pill relative inline-flex shrink-0 items-center ${LIST_HOVER_TRANSITION}`,
+        editor
+          ? "h-8 rounded-none border-t-2 border-r border-r-border"
+          : "h-7 rounded-md max-md:pointer-coarse:h-9",
         COARSE_POINTER_TEXT_SM_CLASS,
         compact && "max-w-full",
-        isActive
-          ? cn(CONTEXT_SELECTION_SURFACE_CLASS, "text-foreground")
-          : "text-muted-foreground hover:bg-state-hover",
+        editor
+          ? isActive
+            ? "border-t-foreground bg-background text-foreground"
+            : "border-t-transparent text-muted-foreground hover:bg-state-hover"
+          : isActive
+            ? cn(CONTEXT_SELECTION_SURFACE_CLASS, "text-foreground")
+            : "text-muted-foreground hover:bg-state-hover",
       )}
     >
       <button
@@ -81,18 +92,22 @@ export function TabPill({
         aria-pressed={isActive}
         className={cn(
           "flex h-full min-w-0 items-center rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-          iconOnly ? "px-1.5" : "pl-1.5 pr-2",
+          iconOnly ? "px-1.5" : editor ? "pl-2 pr-7" : "pl-1.5 pr-2",
           !iconOnly &&
             closeAction &&
+            !editor &&
             enlargeCloseTargetOnCoarsePointer &&
             "max-md:pointer-coarse:pl-3.5",
           compact &&
             (iconOnly
               ? "w-7 justify-center max-md:pointer-coarse:w-9"
-              : "px-2"),
-          compact && closeAction && !leadingVisual && "pl-8",
+              : editor
+                ? null
+                : "px-2"),
+          compact && closeAction && !leadingVisual && !editor && "pl-8",
           compact &&
             closeAction &&
+            !editor &&
             enlargeCloseTargetOnCoarsePointer &&
             "max-md:pointer-coarse:pl-9",
         )}
@@ -103,16 +118,19 @@ export function TabPill({
               TAB_PILL_LEADING_VISUAL_CLASS,
               !iconOnly && "mr-1.5",
               closeAction &&
+                !editor &&
                 (compact
                   ? "group-hover/tab-pill:opacity-0 group-focus-within/tab-pill:opacity-0"
                   : "group-hover/tab-pill:opacity-0 tab-pill-close-focus-visible:opacity-0 [@media(hover:none)]:opacity-0"),
               compact &&
                 closeAction &&
+                !editor &&
                 (isActive
                   ? "[@media(hover:none)]:opacity-0"
                   : "[@media(hover:none)]:opacity-100"),
               compact &&
                 closeAction &&
+                !editor &&
                 enlargeCloseTargetOnCoarsePointer &&
                 "max-md:pointer-coarse:absolute max-md:pointer-coarse:left-2",
             )}
@@ -141,6 +159,7 @@ export function TabPill({
           compact={compact}
           enlargeCloseTargetOnCoarsePointer={enlargeCloseTargetOnCoarsePointer}
           isActive={isActive}
+          editor={editor}
         />
       ) : null}
     </div>
@@ -152,11 +171,13 @@ function TabPillCloseButton({
   compact,
   enlargeCloseTargetOnCoarsePointer,
   isActive,
+  editor,
 }: {
   closeAction: TabPillCloseAction;
   compact: boolean;
   enlargeCloseTargetOnCoarsePointer: boolean;
   isActive: boolean;
+  editor: boolean;
 }) {
   const button = (
     <button
@@ -169,10 +190,13 @@ function TabPillCloseButton({
       data-tab-pill-close
       className={cn(
         TAB_PILL_CLOSE_BUTTON_CLASS,
+        editor ? "right-1.5" : "left-1.5",
         compact &&
+          !editor &&
           "left-2 top-auto z-auto translate-y-0 group-focus-within/tab-pill:pointer-events-auto group-focus-within/tab-pill:opacity-100",
         compact && !isActive && "[@media(hover:none)]:hidden",
         compact &&
+          !editor &&
           enlargeCloseTargetOnCoarsePointer &&
           "max-md:pointer-coarse:left-0",
         enlargeCloseTargetOnCoarsePointer &&

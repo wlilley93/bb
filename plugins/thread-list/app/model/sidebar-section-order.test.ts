@@ -3,6 +3,7 @@ import {
   applyVisibleSidebarSectionOrder,
   buildSidebarEntitySectionId,
   insertSidebarSectionAfter,
+  nestSeatSectionOrder,
   normalizeSidebarSectionOrder,
   reorderSidebarSectionOrder,
 } from "./sidebar-section-order.js";
@@ -183,5 +184,19 @@ describe("applyVisibleSidebarSectionOrder", () => {
         legacyEntityAnchor: "sections",
       }),
     ).toEqual(["pinned", "section:b", "section:a", "threads"]);
+  });
+});
+
+describe("nestSeatSectionOrder", () => {
+  it("puts a child seat under its parent and leaves the other rows", () => {
+    expect(
+      nestSeatSectionOrder(
+        ["pinned", "project:pm", "threads", "project:vp"],
+        new Map([
+          ["pm", "vp"],
+          ["vp", null],
+        ]),
+      ),
+    ).toEqual(["pinned", "project:vp", "project:pm", "threads"]);
   });
 });

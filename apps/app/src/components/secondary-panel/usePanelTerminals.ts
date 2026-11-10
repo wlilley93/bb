@@ -43,7 +43,7 @@ export interface PanelTerminals {
   open: (session: TerminalSession) => boolean;
   retryStart: (terminalId: string) => void;
   select: (terminalId: string, target?: TerminalCreateTarget) => void;
-  start: () => void;
+  start: (options?: { keepNewTab?: boolean }) => string | null;
 }
 
 export function terminalTargetForSession(
@@ -112,17 +112,20 @@ export function usePanelTerminals({
   );
 
   const canStart = createTarget !== null;
-  const start = useCallback(() => {
-    if (createTarget === null) return;
+  const start = useCallback((options?: { keepNewTab?: boolean }): string | null => {
+    if (createTarget === null) return null;
     const terminalId = pendingTerminals.start({
       cols: DEFAULT_TERMINAL_COLS,
       rows: DEFAULT_TERMINAL_ROWS,
       target: createTarget,
     });
-    updatePanelState((state) =>
-      closeSecondaryPanelTabInState(state, createNewTabFixedPanelTab().id),
-    );
+    if (options?.keepNewTab !== true) {
+      updatePanelState((state) =>
+        closeSecondaryPanelTabInState(state, createNewTabFixedPanelTab().id),
+      );
+    }
     select(terminalId, tabsCarryTarget ? createTarget : undefined);
+    return terminalId;
   }, [
     createTarget,
     select,

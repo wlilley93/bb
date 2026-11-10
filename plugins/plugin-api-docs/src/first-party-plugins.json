@@ -16,7 +16,7 @@
   },
   {
     "id": "bb--agent-editor",
-    "name": "Agent Editor",
+    "name": "Boltrig Company SOP",
     "icon": "FolderOpen"
   },
   {
@@ -25,9 +25,9 @@
     "icon": "MessageSquare"
   },
   {
-    "id": "bb--company-sop-editor",
-    "name": "Company SOP Editor",
-    "icon": "FileText"
+    "id": "bb--company-linear",
+    "name": "Linear",
+    "icon": null
   },
   {
     "id": "bb-ai",
@@ -212,6 +212,11 @@
   {
     "id": "pdf-preview",
     "name": "PDF preview",
+    "icon": "FileText"
+  },
+  {
+    "id": "bb--office",
+    "name": "Office files",
     "icon": "FileText"
   },
   {

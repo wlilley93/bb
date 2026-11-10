@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   arrangePluginNavPanelPreferences,
   BUILT_IN_SIDEBAR_NAVIGATION_KEYS,
+  DEFAULT_BUILT_IN_SIDEBAR_NAVIGATION_ORDER,
   getPluginNavPanelKey,
+  placeTopSidebarNavigation,
   seedSkillsNavigationPreference,
   togglePluginNavPanelVisibility,
 } from "./pluginNavSidebarOrder";
@@ -14,6 +16,25 @@ function panel(pluginId: string, id: string) {
 const github = panel("github", "pulls");
 const docs = panel("docs", "vault");
 const tasks = panel("tasks", "board");
+
+describe("placeTopSidebarNavigation", () => {
+  it("keeps every built-in row in the default order ahead of a saved row", () => {
+    const placed = placeTopSidebarNavigation(
+      ["github/pulls", BUILT_IN_SIDEBAR_NAVIGATION_KEYS.extensions],
+      ["github/pulls", BUILT_IN_SIDEBAR_NAVIGATION_KEYS.extensions],
+    );
+
+    expect(placed.order).toEqual([
+      ...DEFAULT_BUILT_IN_SIDEBAR_NAVIGATION_ORDER,
+      "github/pulls",
+    ]);
+    expect(placed.visibleKeys?.slice(0, 3)).toEqual([
+      BUILT_IN_SIDEBAR_NAVIGATION_KEYS.newThread,
+      BUILT_IN_SIDEBAR_NAVIGATION_KEYS.searchThreads,
+      BUILT_IN_SIDEBAR_NAVIGATION_KEYS.automations,
+    ]);
+  });
+});
 
 describe("seedSkillsNavigationPreference", () => {
   it("places Skills beside the existing Plugins row and inherits its visibility", () => {

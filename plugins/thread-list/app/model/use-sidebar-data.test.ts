@@ -64,10 +64,39 @@ describe("buildSidebarData", () => {
       isPersonal: false,
     });
     expect(data.personalProject?.id).toBe("proj_me");
+    expect(data.projects.map((project) => project.depth)).toEqual([0, 0]);
     expect([...data.hostsById.entries()]).toEqual([
       ["h1", { id: "h1", name: "Mac" }],
       ["h2", { id: "h2", name: "Box" }],
     ]);
+  });
+
+  it("places a child seat under its parent", () => {
+    const projects = [
+      {
+        id: "pm",
+        name: "PM",
+        isPersonal: false,
+        href: "/pm",
+        settingsHref: "/pm/s",
+        parentProjectId: "vp",
+        primaryThreadId: "thread-pm",
+      },
+      {
+        id: "vp",
+        name: "VP",
+        isPersonal: false,
+        href: "/vp",
+        settingsHref: "/vp/s",
+        parentProjectId: null,
+      },
+    ];
+    const data = buildSidebarData("ready", [], projects, []);
+    expect(data.projects.map((project) => [project.id, project.depth])).toEqual([
+      ["vp", 0],
+      ["pm", 1],
+    ]);
+    expect(data.projects[1]?.primaryThreadId).toBe("thread-pm");
   });
 
   it("reports no personal project when none is flagged", () => {

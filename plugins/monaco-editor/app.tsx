@@ -16,6 +16,7 @@ import {
 } from "./lib/monaco-loader.js";
 import { applyCodeTheme, editorBackground } from "./lib/monaco-theme.js";
 import { cn } from "@/lib/utils";
+import { EditorTabs } from "./components/EditorTabs.js";
 import { FileToolbar, type SaveIndicator } from "./components/FileToolbar.js";
 import { FileTreePanel } from "./components/FileTreePanel.js";
 import type { FlatEntry } from "./lib/file-tree.js";
@@ -38,6 +39,22 @@ type SaveState =
   | { kind: "saving" }
   | { kind: "error"; message: string }
   | { kind: "conflict"; currentSha256: string | null };
+
+function fileInRoot(root: string, relativePath: string): string {
+  if (root === "") return relativePath;
+  if (root.includes("\\")) {
+    return `${root}\\${relativePath.replace(/\//g, "\\")}`;
+  }
+  return `${root}/${relativePath}`;
+}
+
+function fileFromRoot(root: string, absolutePath: string): string {
+  if (root === "") return absolutePath;
+  const prefix = root.includes("\\") ? `${root}\\` : `${root}/`;
+  if (!absolutePath.startsWith(prefix)) return absolutePath;
+  const rest = absolutePath.slice(prefix.length);
+  return root.includes("\\") ? rest.replace(/\\/g, "/") : rest;
+}
 
 function revealLineRange(
   editor: MonacoNs.editor.IStandaloneCodeEditor,
@@ -78,7 +95,16 @@ function MonacoFileOpener({
   const navigationRef = useRef({ path, lineRange: experimental_lineRange });
 
   const [activePath, setActivePath] = useState(path);
-  useEffect(() => setActivePath(path), [path]);
+  const [tabs, setTabs] = useState<readonly string[]>([path]);
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
+  const [pendingClose, setPendingClose] = useState<string | null>(null);
+  useEffect(() => {
+    setActivePath(path);
+    setTabs((current) =>
+      current.includes(path) ? current : [...current, path],
+    );
+  }, [path]);
 
   const sha256Ref = useRef<string | null>(null);
   const saveStateRef = useRef<SaveState>({ kind: "clean" });
@@ -86,7 +112,7 @@ function MonacoFileOpener({
   const [saveState, setSaveStateValue] = useState<SaveState>({ kind: "clean" });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pendingDiscard, setPendingDiscard] = useState(false);
-  const [isFilesOpen, setIsFilesOpen] = useState(false);
+  const [isFilesOpen, setIsFilesOpen] = useState(true);
   const [pendingOpen, setPendingOpen] = useState<string | null>(null);
   const [tree, setTree] = useState<{
     entries: readonly FlatEntry[];
@@ -206,7 +232,10 @@ function MonacoFileOpener({
     let cancelled = false;
     setTree((current) => ({ ...current, isLoading: true, error: null }));
     void rpc
-      .call("tree", { source })
+      .call("tree", {
+        source,
+        ...(source.kind === "host" ? { path } : {}),
+      })
       .then((result) => {
         if (cancelled) return;
         setTree({
@@ -232,16 +261,47 @@ function MonacoFileOpener({
     return () => {
       cancelled = true;
     };
-  }, [isFilesOpen, rpc, source]);
+  }, [isFilesOpen, path, rpc, source]);
+
+  const rememberTab = useCallback((next: string) => {
+    setTabs((current) =>
+      current.includes(next) ? current : [...current, next],
+    );
+  }, []);
 
   const openFromTree = useCallback(
     (next: string) => {
       if (next === activePath) return;
       if (saveStateRef.current.kind === "dirty") {
+        setPendingClose(null);
         setPendingOpen(next);
         return;
       }
+      rememberTab(next);
       setActivePath(next);
+    },
+    [activePath, rememberTab],
+  );
+
+  const closeTab = useCallback(
+    (tab: string) => {
+      const current = tabsRef.current;
+      if (current.length < 2) return;
+      const index = current.indexOf(tab);
+      if (index < 0) return;
+      if (tab !== activePath) {
+        setTabs(current.filter((item) => item !== tab));
+        return;
+      }
+      const neighbor = current[index + 1] ?? current[index - 1];
+      if (neighbor === undefined) return;
+      if (saveStateRef.current.kind === "dirty") {
+        setPendingClose(tab);
+        setPendingOpen(neighbor);
+        return;
+      }
+      setTabs(current.filter((item) => item !== tab));
+      setActivePath(neighbor);
     },
     [activePath],
   );
@@ -264,7 +324,10 @@ function MonacoFileOpener({
     let disposed = false;
     setStatus({ kind: "loading" });
     setIsRefreshing(false);
-    if (saveStateRef.current.kind === "reloaded") {
+    if (
+      saveStateRef.current.kind !== "clean" &&
+      saveStateRef.current.kind !== "saving"
+    ) {
       setSaveState({ kind: "clean" });
     }
 
@@ -369,56 +432,84 @@ function MonacoFileOpener({
   if (status.kind === "delegate") return <Original />;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-row">
       {isFilesOpen ? (
         <FileTreePanel
-          activePath={activePath}
+          activePath={
+            source.kind === "host"
+              ? fileFromRoot(tree.root, activePath)
+              : activePath
+          }
           background={editorBackground(codeTheme.theme)}
           entries={tree.entries}
           error={tree.error}
           isLoading={tree.isLoading}
           root={tree.root}
           onClose={() => setIsFilesOpen(false)}
-          onOpenFile={openFromTree}
+          onOpenFile={(next) =>
+            openFromTree(
+              source.kind === "host" ? fileInRoot(tree.root, next) : next,
+            )
+          }
           truncated={tree.truncated}
         />
       ) : null}
-      <FileToolbar
-        path={activePath}
-        indicator={indicatorFor(saveState, status)}
-        saveConflict={saveState.kind === "conflict"}
-        saveDisabled={
-          status.kind !== "ready" || isRefreshing || saveState.kind === "saving"
-        }
-        onSave={() => void save()}
-        isRefreshing={isRefreshing}
-        onRefresh={requestRefresh}
-        isFilesOpen={isFilesOpen}
-        onToggleFiles={() => setIsFilesOpen((open) => !open)}
-      />
-      <Notice
-        conflictNoticeRef={conflictNoticeRef}
-        isRefreshing={isRefreshing}
-        onDiscardCancel={() => setPendingDiscard(false)}
-        onDiscardConfirm={() => {
-          setPendingDiscard(false);
-          void reloadFromDisk();
-        }}
-        onOpenCancel={() => setPendingOpen(null)}
-        onOpenConfirm={() => {
-          const next = pendingOpen;
-          setPendingOpen(null);
-          if (next !== null) setActivePath(next);
-        }}
-        onOverwrite={() => void overwrite()}
-        onReload={() => void reloadFromDisk()}
-        onUndoReload={undoReload}
-        pendingDiscard={pendingDiscard}
-        pendingOpen={pendingOpen}
-        saveState={saveState}
-        status={status}
-      />
-      <div ref={containerRef} className="min-h-0 flex-1" />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <EditorTabs
+          activePath={activePath}
+          dirty={saveState.kind === "dirty" || saveState.kind === "conflict"}
+          tabs={tabs}
+          onActivate={openFromTree}
+          onClose={closeTab}
+        />
+        <FileToolbar
+          path={activePath}
+          indicator={indicatorFor(saveState, status)}
+          saveConflict={saveState.kind === "conflict"}
+          saveDisabled={
+            status.kind !== "ready" || isRefreshing || saveState.kind === "saving"
+          }
+          onSave={() => void save()}
+          isRefreshing={isRefreshing}
+          onRefresh={requestRefresh}
+          isFilesOpen={isFilesOpen}
+          onToggleFiles={() => setIsFilesOpen((open) => !open)}
+        />
+        <Notice
+          conflictNoticeRef={conflictNoticeRef}
+          isRefreshing={isRefreshing}
+          onDiscardCancel={() => setPendingDiscard(false)}
+          onDiscardConfirm={() => {
+            setPendingDiscard(false);
+            void reloadFromDisk();
+          }}
+          onOpenCancel={() => {
+            setPendingOpen(null);
+            setPendingClose(null);
+          }}
+          onOpenConfirm={() => {
+            const next = pendingOpen;
+            const closing = pendingClose;
+            setPendingOpen(null);
+            setPendingClose(null);
+            if (closing !== null) {
+              setTabs((current) => current.filter((item) => item !== closing));
+            }
+            if (next !== null) {
+              rememberTab(next);
+              setActivePath(next);
+            }
+          }}
+          onOverwrite={() => void overwrite()}
+          onReload={() => void reloadFromDisk()}
+          onUndoReload={undoReload}
+          pendingDiscard={pendingDiscard}
+          pendingOpen={pendingOpen}
+          saveState={saveState}
+          status={status}
+        />
+        <div ref={containerRef} className="min-h-0 flex-1" />
+      </div>
     </div>
   );
 }

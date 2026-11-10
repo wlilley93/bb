@@ -81,6 +81,7 @@ import type {
 import {
   buildSidebarEntitySectionId,
   insertSidebarSectionAfter,
+  nestSeatSectionOrder,
 } from "../model/sidebar-section-order.js";
 import {
   SortableProjectRow,
@@ -625,6 +626,16 @@ function ProjectModeSections({
     hasThreadsSection: personalThreads.length > 0 || projectRows.length === 0,
     showPinnedSection,
   });
+  const seatedOrder = useMemo(
+    () =>
+      nestSeatSectionOrder(
+        order,
+        new Map(
+          projects.map((project) => [project.id, project.parentProjectId]),
+        ),
+      ),
+    [order, projects],
+  );
   const reorderDisabled = order.length < 2;
   const personalItems = useMemo(
     () =>
@@ -776,7 +787,7 @@ function ProjectModeSections({
       label="Projects"
       selectedThreadId={selectedThreadId}
     >
-      <ReorderableSidebarSectionOrderList order={order} threadDnd={threadDnd}>
+      <ReorderableSidebarSectionOrderList order={seatedOrder} threadDnd={threadDnd}>
         {(sectionId, consumeClickSuppression) => {
           const builtInSection = renderBuiltInSidebarSection({
             sectionId,

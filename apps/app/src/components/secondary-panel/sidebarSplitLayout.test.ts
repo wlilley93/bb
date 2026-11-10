@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { MAX_PANES, countPanes, listPanes } from "@/lib/split-layout";
+import {
+  MAX_PANES,
+  countPanes,
+  listPanes,
+  type LayoutNode,
+} from "@/lib/split-layout";
 import {
   FIXED_PANEL_TABS_IDLE_EXPIRY_MS,
   createGitDiffFixedPanelTab,
@@ -14,6 +19,7 @@ import {
   focusSidebarPane,
   getSidebarGroupForPane,
   isCanonicalSidebarSplitState,
+  arrangeWorkspaceWindows,
   moveSidebarPaneToSide,
   moveSidebarTab,
   parseSidebarSplitState,
@@ -797,4 +803,43 @@ describe("adjacentSidebarTab", () => {
       adjacentSidebarTab(createSidebarSplitState([], ""), 1, []),
     ).toBeNull();
   });
+
+  it("stacks files over the browser with the terminal beside them", () => {
+    const files = "new-tab:new-tab:none";
+    const browser = "browser:one:none";
+    const terminal = "terminal:one:none";
+    const info = SIDEBAR_FIXED_INFO_TAB_ID;
+    const state = createSidebarSplitState(
+      [info, files, browser, terminal],
+      files,
+    );
+    const arranged = arrangeWorkspaceWindows(state, browser);
+    expect(arranged.layout.root.type).toBe("split");
+    if (arranged.layout.root.type !== "split") return;
+    expect(arranged.layout.root.dir).toBe("row");
+    const [left, right] = arranged.layout.root.children;
+    expect(left?.type).toBe("split");
+    if (left?.type !== "split" || right?.type !== "pane") return;
+    expect(left.dir).toBe("col");
+    const [filesPane, browserPane] = left.children;
+    expect(filesPane?.type).toBe("pane");
+    expect(browserPane?.type).toBe("pane");
+    if (filesPane?.type !== "pane" || browserPane?.type !== "pane") return;
+    expect(tabsIn(arranged, filesPane)).toEqual([info, files]);
+    expect(
+      getSidebarGroupForPane(arranged, filesPane.paneId)?.activeTabId,
+    ).toBe(files);
+    expect(tabsIn(arranged, browserPane)).toEqual([browser]);
+    expect(
+      getSidebarGroupForPane(arranged, browserPane.paneId)?.activeTabId,
+    ).toBe(browser);
+    expect(tabsIn(arranged, right)).toEqual([terminal]);
+    expect(arranged.layout.focusedPaneId).toBe(browserPane.paneId);
+    expect(arrangeWorkspaceWindows(arranged, browser)).toBe(arranged);
+  });
 });
+
+function tabsIn(state: SidebarSplitState, pane: LayoutNode): string[] {
+  if (pane.type !== "pane") return [];
+  return getSidebarGroupForPane(state, pane.paneId)?.tabIds ?? [];
+}

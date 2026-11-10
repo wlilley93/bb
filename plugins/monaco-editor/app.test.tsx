@@ -57,6 +57,14 @@ const file = {
   absolutePath: "/fixture/target.ts",
   relativePath: "target.ts",
 };
+const emptyTree = () => ({
+  entries: [
+    { path: "target.ts", kind: "file" as const },
+    { path: "src/next.ts", kind: "file" as const },
+  ],
+  root: "/fixture",
+  truncated: false,
+});
 function mount(
   range: PluginFileOpenerProps["experimental_lineRange"],
   read: () => unknown = () => file,
@@ -65,7 +73,11 @@ function mount(
     registration,
     { ...base, experimental_lineRange: range },
     {
-      rpc: { assets: () => ({ baseUrl: "/assets", expiresAtMs: 99999 }), read },
+      rpc: {
+        assets: () => ({ baseUrl: "/assets", expiresAtMs: 99999 }),
+        read,
+        tree: emptyTree,
+      },
     },
   );
 }
@@ -97,6 +109,7 @@ it("saves edits with the toolbar button and prevents duplicate pending saves", a
       assets: () => ({ baseUrl: "/assets", expiresAtMs: 99999 }),
       read: () => file,
       write,
+      tree: emptyTree,
     },
   });
   await waitFor(() => expect(create).toHaveBeenCalledOnce());
@@ -132,6 +145,7 @@ it("overwrites the conflicted version and requires confirmation for a newer conf
       assets: () => ({ baseUrl: "/assets", expiresAtMs: 99999 }),
       read: () => file,
       write,
+      tree: emptyTree,
     },
   });
   await waitFor(() => expect(create).toHaveBeenCalledOnce());
@@ -190,6 +204,7 @@ it("undoes keeping the disk version without writing and restores conflict protec
       assets: () => ({ baseUrl: "/assets", expiresAtMs: 99999 }),
       read,
       write,
+      tree: emptyTree,
     },
   });
   await waitFor(() => expect(create).toHaveBeenCalledOnce());
@@ -241,6 +256,7 @@ it.each(["edit", "file"])(
         assets: () => ({ baseUrl: "/assets", expiresAtMs: 99999 }),
         read: () => file,
         write: () => ({ outcome: "conflict", currentSha256: "external" }),
+        tree: emptyTree,
       },
     });
     await waitFor(() => expect(create).toHaveBeenCalledOnce());
@@ -280,6 +296,7 @@ it("does not offer an old file's draft when its disk reload finishes after navig
       assets: () => ({ baseUrl: "/assets", expiresAtMs: 99999 }),
       read,
       write: () => ({ outcome: "conflict", currentSha256: "external" }),
+      tree: emptyTree,
     },
   });
   await waitFor(() => expect(create).toHaveBeenCalledOnce());
@@ -397,6 +414,25 @@ it("does not create or navigate a disposed loading editor", async () => {
   await act(async () => resolveRead(file));
   expect(create).not.toHaveBeenCalled();
   expect(editor.setSelection).not.toHaveBeenCalled();
+});
+
+it("keeps the file tree open and opens another file in a tab", async () => {
+  const read = vi.fn().mockReturnValue(file);
+  mount(null, read);
+  expect(
+    await screen.findByRole("textbox", { name: "Filter files" }),
+  ).toBeTruthy();
+  fireEvent.click(await screen.findByRole("button", { name: "src" }));
+  fireEvent.click(screen.getByRole("button", { name: "next.ts" }));
+  await waitFor(() =>
+    expect(read).toHaveBeenCalledWith({
+      path: "src/next.ts",
+      source: base.source,
+    }),
+  );
+  expect(screen.getByRole("button", { name: "Close next.ts" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Close next.ts" }));
+  expect(screen.queryByRole("button", { name: "Close next.ts" })).toBeNull();
 });
 
 it("does not apply a stale target cleared during loading", async () => {

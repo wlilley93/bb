@@ -189,6 +189,8 @@ export function useSidebarThreads(
         isPersonal: project.id === PERSONAL_PROJECT_ID,
         href: getProjectComposeRoutePath(project.id),
         settingsHref: getSettingsProjectRoutePath(project.id),
+        parentProjectId: project.parentProjectId ?? null,
+        primaryThreadId: project.primaryThreadId ?? null,
       })),
       sections: data.sections,
     };

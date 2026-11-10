@@ -47,6 +47,50 @@ export function reorderSidebarSectionOrder({
     .filter(isSidebarSectionId);
 }
 
+/** Keep each child seat directly under its parent. Other rows stay where they are. */
+export function nestSeatSectionOrder(
+  order: readonly SidebarSectionId[],
+  parentByProjectId: ReadonlyMap<string, string | null>,
+): SidebarSectionId[] {
+  const projectIds: string[] = [];
+  for (const sectionId of order) {
+    if (sectionId.startsWith("project:")) {
+      projectIds.push(sectionId.slice("project:".length));
+    }
+  }
+  if (projectIds.length === 0) return [...order];
+  const known = new Set(projectIds);
+  const byParent = new Map<string | null, string[]>();
+  for (const id of projectIds) {
+    const parent = parentByProjectId.get(id);
+    const key = parent && known.has(parent) ? parent : null;
+    const list = byParent.get(key);
+    if (list) list.push(id);
+    else byParent.set(key, [id]);
+  }
+  const nested: SidebarSectionId[] = [];
+  const visit = (parent: string | null): void => {
+    for (const id of byParent.get(parent) ?? []) {
+      nested.push(buildSidebarEntitySectionId("project", id));
+      visit(id);
+    }
+  };
+  visit(null);
+  const result: SidebarSectionId[] = [];
+  let placed = false;
+  for (const sectionId of order) {
+    if (sectionId.startsWith("project:")) {
+      if (!placed) {
+        result.push(...nested);
+        placed = true;
+      }
+      continue;
+    }
+    result.push(sectionId);
+  }
+  return result;
+}
+
 interface NormalizeSidebarSectionOrderArgs {
   storedOrder: readonly string[];
   entitySectionIds: readonly SidebarSectionId[];

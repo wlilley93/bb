@@ -350,6 +350,7 @@ beforeEach(async () => {
   resetPluginFrontendBootStateForTest();
   markPluginFrontendsSettled();
   window.localStorage.clear();
+  window.localStorage.setItem("boltrig.sidebar.top.v1", "1");
   setPluginSlotRegistrations(
     "garden",
     registrationSet({
@@ -400,6 +401,7 @@ describe("Rail", () => {
 
     expect(railLabels()).toEqual([
       "Home",
+      "Search",
       "Plugins",
       "Skills",
       "Docs",
@@ -773,13 +775,10 @@ describe("Rail", () => {
     expect(railLabels()).toEqual(["Home", "Plugins", "More", "Settings"]);
   });
 
-  it("keeps hidden destinations reachable from More", async () => {
+  it("opens Search from the rail", () => {
     renderRail(THREAD_PATH);
 
-    fireEvent.keyDown(railButton("More"), { key: "Enter" });
-    fireEvent.click(
-      await screen.findByRole("menuitem", { name: "Search threads" }),
-    );
+    fireEvent.click(railButton("Search"));
 
     expect(mocks.dispatch).toHaveBeenCalledWith("thread.search", null);
   });
@@ -799,6 +798,7 @@ describe("Rail", () => {
     fireEvent.click(within(list).getByRole("checkbox", { name: /Skills/u }));
     expect(railLabels()).toEqual([
       "Home",
+      "Search",
       "Plugins",
       "Docs",
       "More",
@@ -808,9 +808,9 @@ describe("Rail", () => {
 
   it.each([
     { name: "Docs", isCompactViewport: false },
-    { name: "Search threads", isCompactViewport: false },
+    { name: "Search", isCompactViewport: false },
     { name: "Docs", isCompactViewport: true },
-    { name: "Search threads", isCompactViewport: true },
+    { name: "Search", isCompactViewport: true },
   ])(
     "toggles $name visibility from its customization row (compact: $isCompactViewport) without activating it",
     async ({ name, isCompactViewport }) => {
@@ -864,17 +864,17 @@ describe("Rail", () => {
     fireEvent.click(within(list).getByRole("checkbox", { name: /Skills/u }));
     expect(railLabels()).toEqual([
       "Home",
+      "Search",
       "Plugins",
       "Docs",
       "More",
       "Settings",
     ]);
     fireEvent.click(
-      within(list).getByRole("checkbox", { name: /Search threads/u }),
+      within(list).getByRole("checkbox", { name: /Search/u }),
     );
     expect(railLabels()).toEqual([
       "Home",
-      "Search threads",
       "Plugins",
       "Docs",
       "More",
@@ -956,7 +956,7 @@ describe("Rail", () => {
   it("keeps the header New thread button when stored preferences leave New thread out", () => {
     renderRail(THREAD_PATH, { visibleKeys: ["__bb__/extensions"] });
 
-    fireEvent.click(screen.getByRole("button", { name: "New thread" }));
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
     expect(mocks.onNewChat).toHaveBeenCalledTimes(1);
   });
 
@@ -977,11 +977,11 @@ describe("Rail", () => {
         .getAllByRole("checkbox")
         .map((checkbox) => checkbox.getAttribute("aria-label")),
     ).toEqual([
-      "Show Search threads in sidebar",
+      "Show Search in sidebar",
       "Show Plugins in sidebar",
       "Show Skills in sidebar",
       "Show Docs in sidebar",
     ]);
-    expect(screen.getByRole("button", { name: "New thread" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "New" })).toBeDefined();
   });
 });

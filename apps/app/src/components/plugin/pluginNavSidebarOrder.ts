@@ -13,17 +13,44 @@ export const BUILT_IN_SIDEBAR_NAVIGATION_KEYS = {
   automations: "__bb__/automations",
 } as const;
 
-export const DEFAULT_HIDDEN_SIDEBAR_NAVIGATION_KEYS = [
-  BUILT_IN_SIDEBAR_NAVIGATION_KEYS.searchThreads,
-] as const;
+export const DEFAULT_HIDDEN_SIDEBAR_NAVIGATION_KEYS: readonly string[] = [];
 
 export const DEFAULT_BUILT_IN_SIDEBAR_NAVIGATION_ORDER = [
   BUILT_IN_SIDEBAR_NAVIGATION_KEYS.newThread,
   BUILT_IN_SIDEBAR_NAVIGATION_KEYS.searchThreads,
+  BUILT_IN_SIDEBAR_NAVIGATION_KEYS.automations,
   BUILT_IN_SIDEBAR_NAVIGATION_KEYS.extensions,
   BUILT_IN_SIDEBAR_NAVIGATION_KEYS.skills,
+] as const;
+
+export const SIDEBAR_TOP_NAVIGATION_SEED_KEY = "boltrig.sidebar.top.v1";
+
+const TOP_SIDEBAR_NAVIGATION_KEYS = [
+  BUILT_IN_SIDEBAR_NAVIGATION_KEYS.newThread,
+  BUILT_IN_SIDEBAR_NAVIGATION_KEYS.searchThreads,
   BUILT_IN_SIDEBAR_NAVIGATION_KEYS.automations,
 ] as const;
+
+export function placeTopSidebarNavigation(
+  order: readonly string[],
+  visibleKeys: readonly string[] | null,
+): { order: string[]; visibleKeys: string[] | null } {
+  const builtIn = DEFAULT_BUILT_IN_SIDEBAR_NAVIGATION_ORDER;
+  const rest = order.filter(
+    (key) => !builtIn.some((builtInKey) => builtInKey === key),
+  );
+  const nextOrder = [...builtIn, ...rest];
+  if (visibleKeys === null) {
+    return { order: nextOrder, visibleKeys: null };
+  }
+  const restVisible = visibleKeys.filter(
+    (key) => !TOP_SIDEBAR_NAVIGATION_KEYS.some((topKey) => topKey === key),
+  );
+  return {
+    order: nextOrder,
+    visibleKeys: [...TOP_SIDEBAR_NAVIGATION_KEYS, ...restVisible],
+  };
+}
 
 export function seedSkillsNavigationPreference(
   order: readonly string[],

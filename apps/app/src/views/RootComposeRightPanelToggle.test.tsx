@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LazyThreadSecondaryPanel } from "@/components/secondary-panel/lazySecondaryPanelComponents";
-import { RootComposeRightPanelToggle } from "./RootComposeView";
+import { WorkspaceWindowButtons } from "@/components/secondary-panel/WorkspaceWindowButtons";
 
 const { preloadThreadSecondaryPanel } = vi.hoisted(() => ({
   preloadThreadSecondaryPanel: vi.fn(),
@@ -31,19 +31,25 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("RootComposeRightPanelToggle", () => {
-  it("warms the panel from toggle intent but not from mounting the toggle", async () => {
+describe("WorkspaceWindowButtons", () => {
+  it("warms the panel from a window button but not from mounting the row", async () => {
     vi.useFakeTimers();
     const preload = vi
       .spyOn(LazyThreadSecondaryPanel, "preload")
       .mockResolvedValue(undefined);
-    render(<RootComposeRightPanelToggle isOpen={false} onToggle={vi.fn()} />);
+    render(
+      <WorkspaceWindowButtons
+        onBrowser={vi.fn()}
+        onFiles={vi.fn()}
+        onTerminal={vi.fn()}
+      />,
+    );
 
     await act(async () => vi.runAllTimersAsync());
     expect(preload).not.toHaveBeenCalled();
     expect(preloadThreadSecondaryPanel).not.toHaveBeenCalled();
 
-    const button = screen.getByRole("button", { name: "Show right panel" });
+    const button = screen.getByRole("button", { name: "Terminal" });
     fireEvent.pointerEnter(button);
     fireEvent.pointerDown(button);
     fireEvent.focus(button);

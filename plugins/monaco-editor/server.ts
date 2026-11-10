@@ -52,7 +52,12 @@ export const rpcContract = defineRpcContract({
     ]),
   },
   tree: {
-    input: z.object({ source: sourceSchema }).strict(),
+    input: z
+      .object({
+        source: sourceSchema,
+        path: z.string().min(1).optional(),
+      })
+      .strict(),
     output: z.object({
       root: z.string(),
       entries: z.array(
@@ -169,7 +174,11 @@ export default async function plugin(bb: BbPluginApi) {
         hostId,
       };
     }
-    if (source.environmentId === null && source.kind === "workspace") {
+    if (
+      source.environmentId === null &&
+      (source.kind === "workspace" ||
+        (source.kind === "host" && getHostPathDirname(filePath) === null))
+    ) {
       if (source.projectId === null) {
         throw new Error("This file has no environment or project");
       }
@@ -192,23 +201,29 @@ export default async function plugin(bb: BbPluginApi) {
         hostId: checkout.hostId,
       };
     }
+    if (source.kind === "host") {
+      const rootPath = getHostPathDirname(filePath);
+      if (rootPath !== null) {
+        let hostId = source.experimental_hostId;
+        if (hostId === undefined && source.environmentId !== null) {
+          const environment = await bb.sdk.environments.get({
+            environmentId: source.environmentId,
+          });
+          hostId = environment.hostId ?? undefined;
+        }
+        return {
+          path: filePath,
+          rootPath,
+          ...(hostId ? { hostId } : {}),
+        };
+      }
+    }
     if (source.environmentId === null) {
       throw new Error("This file has no environment to resolve it against");
     }
     const environment = await bb.sdk.environments.get({
       environmentId: source.environmentId,
     });
-
-    if (source.kind === "host") {
-      const rootPath = getHostPathDirname(filePath);
-      if (rootPath === null)
-        throw new Error("Host file paths must be absolute");
-      return {
-        path: filePath,
-        rootPath,
-        ...(environment.hostId ? { hostId: environment.hostId } : {}),
-      };
-    }
 
     if (!environment.path) {
       throw new Error("This environment has no workspace path");
@@ -258,8 +273,11 @@ export default async function plugin(bb: BbPluginApi) {
       };
     },
 
-    async tree({ source }) {
-      const target = await resolveTarget(source, ".");
+    async tree({ source, path: filePath }) {
+      const target = await resolveTarget(
+        source,
+        source.kind === "host" ? (filePath ?? "") : ".",
+      );
       const result = await bb.sdk.files.listPaths({
         path: target.rootPath,
         includeFiles: true,

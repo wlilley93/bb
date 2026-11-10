@@ -145,4 +145,32 @@ describe("TabPill", () => {
     expect(onClose).toHaveBeenCalledOnce();
     expect(onSelect).not.toHaveBeenCalled();
   });
+
+  it("keeps the file icon on the left and the close control on the right", () => {
+    render(
+      <TabPill
+        appearance="editor"
+        compact
+        label="install.mjs"
+        title="install.mjs"
+        isActive
+        onSelect={vi.fn()}
+        leadingVisual={<span aria-hidden>file</span>}
+        closeAction={{
+          closeLabel: "Close install.mjs",
+          onClose: vi.fn(),
+        }}
+      />,
+    );
+
+    const tab = screen.getByRole("button", { name: "install.mjs" });
+    const close = screen.getByRole("button", { name: "Close install.mjs" });
+    expect(tab.closest("[data-tab-pill]")?.getAttribute("data-tab-appearance")).toBe(
+      "editor",
+    );
+    expect(close.classList.contains("right-1.5")).toBe(true);
+    expect(close.classList.contains("left-1.5")).toBe(false);
+    expect(tab.textContent).toContain("file");
+    expect(tab.classList.contains("pr-7")).toBe(true);
+  });
 });

@@ -65,6 +65,7 @@ interface RootComposeSecondaryContentProps {
   isSecondaryPanelOpen: boolean;
   onToggleSecondaryPanel: () => void;
   secondaryPanel: RootSecondaryPanelProps;
+  windowActions?: ReactNode;
 }
 
 function DrawerPanelLoadingSkeleton() {
@@ -88,6 +89,7 @@ export function RootComposeSecondaryContent({
   isSecondaryPanelOpen,
   onToggleSecondaryPanel,
   secondaryPanel,
+  windowActions = null,
 }: RootComposeSecondaryContentProps) {
   const paneContext = useOptionalPaneContext();
   const secondaryPanelHost = paneContext?.secondaryPanelHost ?? null;
@@ -122,6 +124,19 @@ export function RootComposeSecondaryContent({
               )}
             />
           ) : null}
+        </div>
+      ) : null}
+      {windowActions ? (
+        <div
+          className={cn(
+            "absolute z-20 flex",
+            MACOS_APP_REGION_NO_DRAG_CLASS,
+            isCompactHomeLayout
+              ? "top-0 right-0 h-(--bb-app-chrome-row-height) items-center pr-[calc(var(--bb-sidebar-rail-padding)-2px)] max-md:pointer-coarse:pr-(--bb-sidebar-rail-padding)"
+              : "top-0 right-[calc(1rem+env(safe-area-inset-right))] h-(--bb-app-chrome-row-height) items-center",
+          )}
+        >
+          {windowActions}
         </div>
       ) : null}
       <RootComposeHome

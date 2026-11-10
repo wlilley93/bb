@@ -18,6 +18,7 @@ import {
   OPTION_TRIGGER_CONTENT_CLASS_NAME,
 } from "@bb/shared-ui/option-display";
 import { Popover, PopoverContent, PopoverTrigger } from "@bb/shared-ui/popover";
+import { orderSeatTree } from "@bb/domain";
 import { useScrollOverflowState } from "../thread/timeline/useScrollOverflowState";
 import { searchPickerOptions } from "@bb/shared-ui/picker-search";
 import {
@@ -32,6 +33,7 @@ const PROJECT_PICKER_ITEM_CLASS_NAME =
 export interface ProjectSelectorOption {
   id: string;
   name: string;
+  parentProjectId?: string | null;
 }
 
 export interface ProjectSelectorCreateProjectConfig {
@@ -105,6 +107,10 @@ export function ProjectSelector({
           })
         : projects,
     [projects, searchQuery, showSearch],
+  );
+  const seatedProjects = useMemo(
+    () => orderSeatTree(filteredProjects),
+    [filteredProjects],
   );
   const selected = value !== null ? projects.find((p) => p.id === value) : null;
   const allProjectsSelected =
@@ -243,7 +249,7 @@ export function ProjectSelector({
                       "[mask-image:linear-gradient(to_bottom,black_calc(100%_-_0.25rem),transparent)] md:[mask-image:linear-gradient(to_bottom,black_calc(100%_-_0.5rem),transparent)]",
                   )}
                 >
-                  {filteredProjects.map((project) => (
+                  {seatedProjects.map(({ item: project, depth }) => (
                     <CommandItem
                       key={project.id}
                       value={project.id}
@@ -257,7 +263,10 @@ export function ProjectSelector({
                         className="size-4 text-muted-foreground"
                         aria-hidden
                       />
-                      <span className="min-w-0 flex-1 truncate">
+                      <span
+                        className="min-w-0 flex-1 truncate"
+                        style={depth > 0 ? { marginLeft: depth * 12 } : undefined}
+                      >
                         {project.name}
                       </span>
                       <Icon

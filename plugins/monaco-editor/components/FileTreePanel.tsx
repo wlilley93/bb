@@ -8,10 +8,10 @@ import {
 } from "../lib/file-tree.js";
 import { copy } from "../lib/editor-commands.js";
 import {
-  clampTreeHeight,
-  readStoredTreeHeight,
-  storeTreeHeight,
-} from "../lib/file-tree-height.js";
+  clampTreeWidth,
+  readStoredTreeWidth,
+  storeTreeWidth,
+} from "../lib/file-tree-width.js";
 import { ContextMenu, type ContextMenuState } from "./ContextMenu.js";
 import { cn } from "@/lib/utils";
 
@@ -45,42 +45,43 @@ export function FileTreePanel({
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
   const activeRowRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const [height, setHeight] = useState(readStoredTreeHeight);
-  const heightRef = useRef(height);
-  heightRef.current = height;
-  const requestedHeightRef = useRef(height);
-  const dragStartHeightRef = useRef<number | null>(null);
+  const [width, setWidth] = useState(readStoredTreeWidth);
+  const widthRef = useRef(width);
+  widthRef.current = width;
+  const requestedWidthRef = useRef(width);
+  const dragStartWidthRef = useRef<number | null>(null);
 
-  const availableHeight = (): number =>
-    panelRef.current?.parentElement?.clientHeight ?? window.innerHeight;
+  const availableWidth = (): number =>
+    panelRef.current?.parentElement?.clientWidth ?? window.innerWidth;
 
-  const applyHeight = (requested: number) => {
-    requestedHeightRef.current = requested;
-    setHeight(clampTreeHeight(requested, availableHeight()));
+  const applyWidth = (requested: number) => {
+    requestedWidthRef.current = requested;
+    setWidth(clampTreeWidth(requested, availableWidth()));
   };
 
   const startResize = () => {
-    dragStartHeightRef.current = heightRef.current;
+    dragStartWidthRef.current = widthRef.current;
   };
 
-  const resizeBy = (deltaY: number) => {
-    applyHeight((dragStartHeightRef.current ?? heightRef.current) + deltaY);
+  const resizeBy = (deltaX: number) => {
+    applyWidth((dragStartWidthRef.current ?? widthRef.current) + deltaX);
   };
 
-  const commitHeight = () => {
-    dragStartHeightRef.current = null;
-    storeTreeHeight(heightRef.current);
+  const commitWidth = () => {
+    dragStartWidthRef.current = null;
+    storeTreeWidth(widthRef.current);
   };
 
   useLayoutEffect(() => {
     const parent = panelRef.current?.parentElement;
     if (parent === null || parent === undefined) return;
+    if (typeof ResizeObserver === "undefined") return;
     const fit = () => {
-      const next = clampTreeHeight(
-        requestedHeightRef.current,
-        parent.clientHeight,
+      const next = clampTreeWidth(
+        requestedWidthRef.current,
+        parent.clientWidth,
       );
-      if (next !== heightRef.current) setHeight(next);
+      if (next !== widthRef.current) setWidth(next);
     };
     fit();
     const observer = new ResizeObserver(fit);
@@ -130,7 +131,10 @@ export function FileTreePanel({
   }, [activePath]);
 
   useEffect(() => {
-    activeRowRef.current?.scrollIntoView({ block: "nearest" });
+    const row = activeRowRef.current;
+    if (row !== null && typeof row.scrollIntoView === "function") {
+      row.scrollIntoView({ block: "nearest" });
+    }
   }, [activePath, entries.length]);
 
   const effectiveExpanded = useMemo(() => {
@@ -151,11 +155,11 @@ export function FileTreePanel({
     <div
       ref={panelRef}
       style={{
-        height,
+        width,
         ...(background === null ? {} : { backgroundColor: background }),
       }}
       className={cn(
-        "flex shrink-0 flex-col",
+        "relative flex h-full min-h-0 shrink-0 flex-col border-r border-border",
         background === null && "bg-surface-recessed",
       )}
     >
@@ -232,7 +236,7 @@ export function FileTreePanel({
       <ContextMenu state={menu} onClose={() => setMenu(null)} />
       <ResizeHandle
         onResize={resizeBy}
-        onResizeEnd={commitHeight}
+        onResizeEnd={commitWidth}
         onResizeStart={startResize}
       />
     </div>
@@ -244,7 +248,7 @@ function ResizeHandle({
   onResizeEnd,
   onResizeStart,
 }: {
-  onResize: (deltaY: number) => void;
+  onResize: (deltaX: number) => void;
   onResizeEnd: () => void;
   onResizeStart: () => void;
 }) {
@@ -255,7 +259,7 @@ function ResizeHandle({
     event.preventDefault();
     const target = event.currentTarget;
     const pointerId = event.pointerId;
-    const startY = event.clientY;
+    const startX = event.clientX;
     const divider = dividerRef.current;
     if (divider !== null) divider.dataset.dragging = "true";
     onResizeStart();
@@ -263,7 +267,7 @@ function ResizeHandle({
 
     const move = (moveEvent: PointerEvent) => {
       if (moveEvent.pointerId !== pointerId) return;
-      onResize(moveEvent.clientY - startY);
+      onResize(moveEvent.clientX - startX);
     };
     const finish = (finishEvent: PointerEvent) => {
       if (finishEvent.pointerId !== pointerId) return;
@@ -286,17 +290,17 @@ function ResizeHandle({
       ref={dividerRef}
       role="separator"
       aria-label="Resize the file tree"
-      aria-orientation="horizontal"
+      aria-orientation="vertical"
       tabIndex={0}
       onKeyDown={(event) => {
-        if (event.key === "ArrowUp") onResize(-KEYBOARD_RESIZE_STEP_PX);
-        else if (event.key === "ArrowDown") onResize(KEYBOARD_RESIZE_STEP_PX);
+        if (event.key === "ArrowLeft") onResize(-KEYBOARD_RESIZE_STEP_PX);
+        else if (event.key === "ArrowRight") onResize(KEYBOARD_RESIZE_STEP_PX);
         else return;
         event.preventDefault();
         onResizeEnd();
       }}
       className={cn(
-        "relative z-10 h-px shrink-0 cursor-row-resize bg-border transition-colors",
+        "absolute top-0 right-0 z-10 h-full w-px cursor-col-resize bg-border transition-colors",
         "hover:bg-ring/40 data-[dragging]:bg-ring/40",
         "focus-visible:bg-ring focus-visible:outline-none",
       )}
@@ -304,7 +308,7 @@ function ResizeHandle({
       <div
         aria-hidden
         onPointerDown={handlePointerDown}
-        className="absolute -top-1.5 left-0 h-3 w-full cursor-row-resize touch-none bg-transparent"
+        className="absolute -left-1.5 top-0 h-full w-3 cursor-col-resize touch-none bg-transparent"
       />
     </div>
   );

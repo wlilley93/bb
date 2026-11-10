@@ -463,26 +463,15 @@ describe("agent session options", () => {
     expect(screen.queryByRole("button", { name: "Agent options" })).toBeNull();
   });
 
-  it("saves a choice on the thread and shows it at once, then returns to the agent's value if the save fails", async () => {
+  it("shows the thread's agent and does not offer another", () => {
     renderPromptArea({ sessionOptions: [modeOption] });
-    const trigger = () => screen.getByRole("button", { name: "Agent options" });
-    expect(trigger().textContent).toContain("Agent");
+    const trigger = screen.getByRole("button", { name: "Agent options" });
+    expect(trigger.textContent).toContain("Agent");
+    expect((trigger as HTMLButtonElement).disabled).toBe(true);
 
-    fireEvent.keyDown(trigger(), { key: "Enter" });
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Plan" }));
-
-    expect(mocks.updateThreadMutate).toHaveBeenCalledWith(
-      { id: "thr_1", sessionOptions: { mode: "plan" } },
-      expect.objectContaining({ onError: expect.any(Function) }),
-    );
-    await waitFor(() => expect(trigger().textContent).toContain("Plan"));
-
-    const [, callbacks] = mocks.updateThreadMutate.mock.calls.at(-1) as [
-      unknown,
-      { onError: () => void },
-    ];
-    act(() => callbacks.onError());
-    await waitFor(() => expect(trigger().textContent).toContain("Agent"));
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    expect(screen.queryByRole("menuitem", { name: "Plan" })).toBeNull();
+    expect(mocks.updateThreadMutate).not.toHaveBeenCalled();
   });
 
   it("keeps the mode in the footer and moves every other option into the model picker", async () => {
@@ -501,11 +490,11 @@ describe("agent session options", () => {
       ],
     });
 
-    fireEvent.keyDown(screen.getByRole("button", { name: "Agent options" }), {
-      key: "Enter",
-    });
-    await screen.findByRole("menuitem", { name: "Plan" });
-    expect(screen.queryByRole("menuitem", { name: "On" })).toBeNull();
+    expect(
+      (screen.getByRole("button", { name: "Agent options" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(screen.queryByRole("menuitem", { name: "Plan" })).toBeNull();
 
     const pickerOption = () =>
       within(screen.getByTestId("picker-agent-options")).getByRole("button", {

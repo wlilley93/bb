@@ -52,6 +52,7 @@ import {
   parseEnvironmentValue,
   REUSE_VALUE_WITHOUT_ENVIRONMENT,
 } from "@/components/pickers/environment-picker-value";
+import { readAgentModeCatalog } from "@/lib/agent-tree";
 import { providerInputsControlRequired } from "@/components/pickers/environment-provider-inputs";
 import { useMachineProviderInputs } from "@/components/pickers/machine-provider-inputs";
 import { formatModelLoadErrorText } from "@/components/pickers/model-load-error-message";
@@ -157,6 +158,8 @@ export interface NewThreadComposerSeed {
   permissionMode?: PermissionMode;
   environment?: NewThreadRequest["environment"];
   initialPrompt?: string;
+  /** OpenCode session mode, taken from the seat. The mode control does not switch it. */
+  agent?: string;
 }
 
 interface NewThreadComposerLocks {
@@ -236,6 +239,9 @@ export interface NewThreadComposerState {
   projectHostId: string | null;
   panelThreadId: string | null;
   selectedProviderId: string;
+  agentMode: string | null;
+  agentSeatIds: readonly string[];
+  agentLabels: ReadonlyMap<string, string>;
   promptDraft: PromptDraftController;
   focusPromptBox: () => void;
   pluginComposerHost: PluginComposerHost;
@@ -600,7 +606,12 @@ export function NewThreadComposer({
     [currentProject?.sources],
   );
   const projectOptions = useMemo(
-    () => projects?.map(({ id, name }) => ({ id, name })) ?? [],
+    () =>
+      projects?.map(({ id, name, parentProjectId }) => ({
+        id,
+        name,
+        parentProjectId,
+      })) ?? [],
     [projects],
   );
 
@@ -708,6 +719,7 @@ export function NewThreadComposer({
     seed?.serviceTier ?? null,
     seed?.permissionMode ?? null,
     seed?.environment ?? null,
+    seed?.agent ?? null,
   ]);
   const environmentSeed = useMemo(
     () =>
@@ -973,6 +985,24 @@ export function NewThreadComposer({
     sessionOptionSelections,
     setSessionOption,
   } = creationOptions;
+  useEffect(() => {
+    const agent = seed?.agent;
+    if (!agent || sessionOptionSelections.mode === agent) return;
+    setSessionOption("mode", agent);
+  }, [seed?.agent, sessionOptionSelections.mode, setSessionOption]);
+  const selectedMode = sessionOptionSelections.mode;
+  const agentMode =
+    selectedMode === undefined || selectedMode === true || selectedMode === false
+      ? null
+      : selectedMode;
+  const agentCatalog = useMemo(
+    () =>
+      readAgentModeCatalog([
+        ...(activeModel?.sessionOptions ?? []),
+        ...declaredSessionOptions,
+      ]),
+    [activeModel?.sessionOptions, declaredSessionOptions],
+  );
   const selectedThreadModel = activeModel?.model ?? selectedModel;
   const placedSessionOptions = useMemo(
     () =>
@@ -2082,6 +2112,7 @@ export function NewThreadComposer({
                   options={placedSessionOptions.footer}
                   choices={NO_SESSION_OPTION_CHOICES}
                   onChange={setSessionOption}
+                  disabled={Boolean(seed?.agent)}
                 />
               ),
             environmentProviderInputsSlot,
@@ -2274,6 +2305,9 @@ export function NewThreadComposer({
         projectHostId,
         panelThreadId,
         selectedProviderId,
+        agentMode,
+        agentSeatIds: agentCatalog.ids,
+        agentLabels: agentCatalog.labels,
         promptDraft,
         focusPromptBox,
         pluginComposerHost,

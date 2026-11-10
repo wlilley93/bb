@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { WorkspacePathEntry } from "@bb/server-contract";
 import { useEnvironmentPathSuggestions } from "./queries/environment-queries";
 import { useProjectPathSuggestions } from "./queries/project-queries";
@@ -8,6 +8,7 @@ import type { PathListOptions } from "@/lib/path-list-options";
 import { useDebouncedValue } from "./useDebouncedValue";
 
 export const PATH_SUGGESTION_DEBOUNCE_MS = 120;
+export const PATH_SEARCH_DEADLINE_MS = 8_000;
 
 const DEFAULT_PATH_SUGGESTION_LIMIT = 8;
 const SOURCE_OVERSAMPLE_MULTIPLIER = 2;
@@ -232,17 +233,38 @@ export function usePathSuggestions(
   ]);
 
   const isFetching =
-    (isWorkspaceQueryEnabled && workspaceQuery.isFetching) ||
-    (isThreadStorageQueryEnabled && threadStorageQuery.isFetching);
-  const isPending =
-    (isWorkspaceQueryEnabled && workspaceQuery.isPending) ||
-    (isThreadStorageQueryEnabled && threadStorageQuery.isPending);
-  const isSearching = isDebouncing || isPending || isFetching;
-  const isLoading = hasQuery && suggestions.length === 0 && isSearching;
+    (isWorkspaceQueryEnabled && workspaceQuery.fetchStatus === "fetching") ||
+    (isThreadStorageQueryEnabled &&
+      threadStorageQuery.fetchStatus === "fetching");
+  const isPaused =
+    (isWorkspaceQueryEnabled && workspaceQuery.fetchStatus === "paused") ||
+    (isThreadStorageQueryEnabled && threadStorageQuery.fetchStatus === "paused");
+  const isIdlePending =
+    (isWorkspaceQueryEnabled &&
+      workspaceQuery.isPending &&
+      workspaceQuery.fetchStatus === "idle") ||
+    (isThreadStorageQueryEnabled &&
+      threadStorageQuery.isPending &&
+      threadStorageQuery.fetchStatus === "idle");
+  const [gaveUp, setGaveUp] = useState(false);
+  useEffect(() => {
+    if (!hasQuery || (!isFetching && !isIdlePending)) {
+      setGaveUp(false);
+      return;
+    }
+    const timer = setTimeout(() => setGaveUp(true), PATH_SEARCH_DEADLINE_MS);
+    return () => clearTimeout(timer);
+  }, [debouncedTrimmedQuery, hasQuery, isFetching, isIdlePending]);
+  const isSearching =
+    isDebouncing || ((isFetching || isIdlePending) && !gaveUp);
+  const isLoading =
+    hasQuery && suggestions.length === 0 && isSearching && !isPaused && !gaveUp;
   const isRefreshing = hasQuery && suggestions.length > 0 && isSearching;
   const isError =
     hasQuery &&
-    ((isWorkspaceQueryEnabled && workspaceQuery.isError) ||
+    (gaveUp ||
+      isPaused ||
+      (isWorkspaceQueryEnabled && workspaceQuery.isError) ||
       (isThreadStorageQueryEnabled && threadStorageQuery.isError));
 
   return {

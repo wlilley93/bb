@@ -269,8 +269,7 @@ export function TopList({
             ) : null}
           </div>
         ) : null}
-        {hidden.length > 0 ? (
-          <SidebarNavigationMoreMenu
+        <SidebarNavigationMoreMenu
             trigger={
               <ListRowButton
                 aria-label={
@@ -295,7 +294,6 @@ export function TopList({
             sideOffset={MORE_MENU_SIDE_OFFSET}
             testId="sidebar-navigation-more-menu"
           />
-        ) : null}
       </div>
       <div
         aria-hidden="true"

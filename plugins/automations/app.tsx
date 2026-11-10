@@ -874,7 +874,7 @@ export default definePluginApp((app) => {
   app.composer.customize(composerCustomization);
   app.slots.navPanel({
     id: "automations",
-    title: "Automations",
+    title: "Scheduled",
     icon: "Repeat",
     path: PANEL_PATH,
     component: AutomationsPanel,

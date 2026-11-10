@@ -26,7 +26,10 @@ import {
   type ThreadTimelineQuery,
 } from "@bb/server-contract";
 import type { AppDeps } from "../../types.js";
-import { COMMAND_TIMEOUT_MS } from "../../constants.js";
+import {
+  COMMAND_TIMEOUT_MS,
+  PATH_TYPEAHEAD_TIMEOUT_MS,
+} from "../../constants.js";
 import { ApiError } from "../../errors.js";
 import { requirePublicThread } from "../../services/lib/entity-lookup.js";
 import { callHostRetryableOnlineRpc } from "../../services/hosts/online-rpc.js";
@@ -522,7 +525,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
       const result = await callHostRetryableOnlineRpc(deps, {
         hostId: target.hostId,
         signal: context.req.raw.signal,
-        timeoutMs: COMMAND_TIMEOUT_MS,
+        timeoutMs: PATH_TYPEAHEAD_TIMEOUT_MS,
         command: {
           type: "host.list_paths",
           path: target.storagePath,

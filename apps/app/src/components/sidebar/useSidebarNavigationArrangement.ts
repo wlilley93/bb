@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useAtom } from "jotai";
 import {
   pluginNavPanelOrderAtom,
@@ -8,7 +8,9 @@ import {
   arrangePluginNavPanelPreferences,
   DEFAULT_HIDDEN_SIDEBAR_NAVIGATION_KEYS,
   getPluginNavPanelKey,
+  placeTopSidebarNavigation,
   seedSkillsNavigationPreference,
+  SIDEBAR_TOP_NAVIGATION_SEED_KEY,
   togglePluginNavPanelVisibility,
 } from "@/components/plugin/pluginNavSidebarOrder";
 import { haveSameOrder, reorderStoredOrder } from "@/lib/stored-order";
@@ -38,6 +40,22 @@ export function useSidebarNavigationArrangement<Row extends ArrangeableRow>(
     () => seedSkillsNavigationPreference(storedOrder, storedVisibleKeys),
     [storedOrder, storedVisibleKeys],
   );
+  useEffect(() => {
+    if (window.localStorage.getItem(SIDEBAR_TOP_NAVIGATION_SEED_KEY) === "1") {
+      return;
+    }
+    window.localStorage.setItem(SIDEBAR_TOP_NAVIGATION_SEED_KEY, "1");
+    if (storedOrder.length === 0 && storedVisibleKeys === null) return;
+    const next = placeTopSidebarNavigation(storedOrder, storedVisibleKeys);
+    if (!haveSameOrder(storedOrder, next.order)) setStoredOrder(next.order);
+    if (
+      next.visibleKeys !== null &&
+      (storedVisibleKeys === null ||
+        !haveSameOrder(storedVisibleKeys, next.visibleKeys))
+    ) {
+      setStoredVisibleKeys(next.visibleKeys);
+    }
+  }, [setStoredOrder, setStoredVisibleKeys, storedOrder, storedVisibleKeys]);
   const newLeadingKeys = useMemo(
     () =>
       leadingOrderKeys.filter((key) => !seededPreferences.order.includes(key)),

@@ -7,7 +7,7 @@ editingNotes: Keep flags accurate against the CLI implementation.
 ---
 Project commands
 
-A project maps to a code repository. All threads belong to a project.
+A seat is a Head, a VP, or a PM. A VP belongs to a Head, and a PM belongs to a VP. Threads belong to a seat. Seats come from the company catalogue. `bb project discover` finds ordinary repositories and does not create seats.
 
   bb project list                         List ordinary projects
     --include-personal                    Also include the personal project
@@ -32,7 +32,7 @@ A project maps to a code repository. All threads belong to a project.
   bb project update <id>                  Update a project
     --name <name>                         New name
 
-  bb project delete <id>                  Delete project and all threads
+  bb project delete <id>                  Delete a seat and its own threads. Refused while seats still sit under it.
     --yes                                 Skip confirmation
 
 Global prompt history:

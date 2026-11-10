@@ -1,21 +1,22 @@
 {
-  "name": "bb-plugin-bb--company-sop-editor",
+  "name": "bb-plugin-boltrig-linear",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Edit the company SOP under Agent Operations.",
+  "description": "Connect Linear with OAuth so agents can read and write issues, initiatives and projects.",
   "engines": { "bb": ">=0.0", "bbPluginSdk": ">=0.6.0" },
   "bb": {
-    "name": "Company SOP Editor",
-    "description": "Edit the company SOP under Agent Operations.",
-    "branding": { "icon": "FileText" },
+    "name": "Linear",
+    "description": "Connect Linear with OAuth. A VP is an initiative. A PM heads one team.",
+    "branding": { "icon": "./icons/linear.svg" },
     "server": "./server.ts",
     "app": "./app.tsx"
   },
   "keywords": ["bb-plugin"],
   "scripts": {
     "test": "vitest run --config vitest.config.ts",
-    "typecheck": "tsrs --noEmit"
+    "typecheck": "tsrs --noEmit",
+    "prepare:bundled": "bb-plugin-build prepare-bundled"
   },
   "dependencies": { "zod": "^4.6.7" },
   "devDependencies": {

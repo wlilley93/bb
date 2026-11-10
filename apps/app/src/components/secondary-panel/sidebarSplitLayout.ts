@@ -316,6 +316,233 @@ export function getSidebarGroupForPane(
   return findSidebarPaneGroup(state, paneId)?.group ?? null;
 }
 
+function workspaceWindowKind(
+  tabId: string,
+): "files" | "browser" | "terminal" | null {
+  if (tabId.startsWith("new-tab:")) return "files";
+  if (tabId.startsWith("browser:")) return "browser";
+  if (tabId.startsWith("terminal:")) return "terminal";
+  return null;
+}
+
+function allocateSplitId(
+  prefix: "group-split" | "pane",
+  taken: ReadonlySet<string>,
+): string {
+  let sequence = 1;
+  while (taken.has(`${prefix}-${sequence}`)) sequence += 1;
+  return `${prefix}-${sequence}`;
+}
+
+interface ArrangedWindowGroup {
+  group: SidebarTabGroup;
+  paneId: string;
+}
+
+function claimWindowGroup(
+  state: SidebarSplitState,
+  tabIds: readonly string[],
+  activeTabId: string,
+  usedGroupIds: Set<string>,
+  usedPaneIds: Set<string>,
+): ArrangedWindowGroup {
+  const wanted = new Set(tabIds);
+  for (const pane of listPanes(state.layout.root)) {
+    if (usedPaneIds.has(pane.paneId)) continue;
+    const existing = getSidebarGroupForPane(state, pane.paneId);
+    if (
+      existing === null ||
+      usedGroupIds.has(existing.id) ||
+      existing.tabIds.length !== tabIds.length ||
+      !existing.tabIds.every((tabId) => wanted.has(tabId))
+    ) {
+      continue;
+    }
+    usedGroupIds.add(existing.id);
+    usedPaneIds.add(pane.paneId);
+    return {
+      paneId: pane.paneId,
+      group: {
+        id: existing.id,
+        tabIds: [...tabIds],
+        activeTabId: tabIds.includes(existing.activeTabId)
+          ? existing.activeTabId
+          : activeTabId,
+      },
+    };
+  }
+  const takenGroups = new Set([
+    ...Object.keys(state.groups),
+    ...usedGroupIds,
+  ]);
+  const takenPanes = new Set([
+    ...listPanes(state.layout.root).map((pane) => pane.paneId),
+    ...usedPaneIds,
+  ]);
+  const groupId = allocateSplitId("group-split", takenGroups);
+  const paneId = allocateSplitId("pane", takenPanes);
+  usedGroupIds.add(groupId);
+  usedPaneIds.add(paneId);
+  return {
+    paneId,
+    group: {
+      id: groupId,
+      tabIds: [...tabIds],
+      activeTabId,
+    },
+  };
+}
+
+function stackNodes(nodes: readonly LayoutNode[]): LayoutNode | null {
+  const [first, ...rest] = nodes;
+  if (first === undefined) return null;
+  return rest.reduce<LayoutNode>(
+    (above, below) => ({
+      type: "split",
+      dir: "col",
+      sizes: [0.55, 0.45],
+      children: [above, below],
+    }),
+    first,
+  );
+}
+
+function besideNodes(
+  left: LayoutNode | null,
+  right: LayoutNode | null,
+): LayoutNode | null {
+  if (left === null) return right;
+  if (right === null) return left;
+  return {
+    type: "split",
+    dir: "row",
+    sizes: [0.62, 0.38],
+    children: [left, right],
+  };
+}
+
+export function arrangeWorkspaceWindows(
+  state: SidebarSplitState,
+  focusTabId: string,
+): SidebarSplitState {
+  const files: string[] = [];
+  const browsers: string[] = [];
+  const terminals: string[] = [];
+  const others: string[] = [];
+  const seen = new Set<string>();
+  for (const pane of listPanes(state.layout.root)) {
+    const group = getSidebarGroupForPane(state, pane.paneId);
+    if (group === null) continue;
+    for (const tabId of group.tabIds) {
+      if (seen.has(tabId)) continue;
+      seen.add(tabId);
+      const kind = workspaceWindowKind(tabId);
+      if (kind === "files") files.push(tabId);
+      else if (kind === "browser") browsers.push(tabId);
+      else if (kind === "terminal") terminals.push(tabId);
+      else others.push(tabId);
+    }
+  }
+  if (files.length + browsers.length + terminals.length === 0) return state;
+
+  const usedGroupIds = new Set<string>();
+  const usedPaneIds = new Set<string>();
+  const filesPaneTabs = files.length > 0 ? [...others, ...files] : [];
+  const otherPaneTabs = files.length === 0 ? others : [];
+  const filesGroup =
+    filesPaneTabs.length > 0
+      ? claimWindowGroup(
+          state,
+          filesPaneTabs,
+          files.includes(focusTabId)
+            ? focusTabId
+            : (files[files.length - 1] ?? focusTabId),
+          usedGroupIds,
+          usedPaneIds,
+        )
+      : null;
+  const otherGroup =
+    otherPaneTabs.length > 0
+      ? claimWindowGroup(
+          state,
+          otherPaneTabs,
+          otherPaneTabs.includes(focusTabId)
+            ? focusTabId
+            : (otherPaneTabs[0] ?? focusTabId),
+          usedGroupIds,
+          usedPaneIds,
+        )
+      : null;
+  const browserGroup =
+    browsers.length > 0
+      ? claimWindowGroup(
+          state,
+          browsers,
+          browsers.includes(focusTabId)
+            ? focusTabId
+            : (browsers[browsers.length - 1] ?? focusTabId),
+          usedGroupIds,
+          usedPaneIds,
+        )
+      : null;
+  const terminalGroup =
+    terminals.length > 0
+      ? claimWindowGroup(
+          state,
+          terminals,
+          terminals.includes(focusTabId)
+            ? focusTabId
+            : (terminals[terminals.length - 1] ?? focusTabId),
+          usedGroupIds,
+          usedPaneIds,
+        )
+      : null;
+
+  const left = stackNodes(
+    [
+      filesGroup === null
+        ? null
+        : sidebarPaneNode(filesGroup.paneId, filesGroup.group.id),
+      otherGroup === null
+        ? null
+        : sidebarPaneNode(otherGroup.paneId, otherGroup.group.id),
+      browserGroup === null
+        ? null
+        : sidebarPaneNode(browserGroup.paneId, browserGroup.group.id),
+    ].filter((node): node is PaneNode => node !== null),
+  );
+  const root = besideNodes(
+    left,
+    terminalGroup === null
+      ? null
+      : sidebarPaneNode(terminalGroup.paneId, terminalGroup.group.id),
+  );
+  if (root === null) return state;
+
+  const groups: SidebarSplitState["groups"] = {};
+  let focusedPaneId = state.layout.focusedPaneId;
+  for (const arranged of [filesGroup, otherGroup, browserGroup, terminalGroup]) {
+    if (arranged === null) continue;
+    groups[arranged.group.id] = arranged.group;
+    if (arranged.group.tabIds.includes(focusTabId)) {
+      focusedPaneId = arranged.paneId;
+    }
+  }
+  if (findPane(root, focusedPaneId) === null) {
+    focusedPaneId = listPanes(root)[0]?.paneId ?? focusedPaneId;
+  }
+  return preserveSidebarSplitStateIdentity(state, {
+    version: state.version,
+    groups,
+    layout: { root, focusedPaneId },
+    maximizedPaneId:
+      state.maximizedPaneId !== null &&
+      findPane(root, state.maximizedPaneId) !== null
+        ? state.maximizedPaneId
+        : null,
+  });
+}
+
 export function adjacentSidebarTab(
   state: SidebarSplitState,
   direction: -1 | 1,
