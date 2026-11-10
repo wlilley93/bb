@@ -214,7 +214,6 @@ export function Area({ className, filled = false, lined = false, inset = false, 
       value={value}
       placeholder={!hot && !String(value ?? "") && !filled && !inset ? "" : placeholder}
       wrap="soft"
-      tabSize={mono ? 2 : props.tabSize}
       spellCheck={mono ? false : props.spellCheck}
       autoCorrect={mono ? "off" : props.autoCorrect}
       autoCapitalize={mono ? "off" : props.autoCapitalize}
@@ -226,6 +225,7 @@ export function Area({ className, filled = false, lined = false, inset = false, 
       className={`block ${pad} rounded-md border text-foreground outline-none placeholder:text-muted-foreground placeholder:italic ${mono || filled ? "" : focus} ${caret} ${motion} ${hint} ${!hot && !String(value ?? "") ? (filled || inset ? "placeholder:opacity-60" : "placeholder:opacity-0") : ""} ${type} ${surface} ${mono ? "" : className ?? "min-h-40"}`}
       style={{
         ...style,
+        ...(mono ? { tabSize: 2 } : null),
         ...(lined && !boxed && !mono && !(dirty || hot) ? { borderBottomColor: stroke } : null),
         ...((dirty || (hot && lined)) && !boxed && !mono ? { borderBottomColor: accent } : null),
         ...(boxed ? { borderColor: dirty || hot ? accent : stroke, height: 32 } : null),

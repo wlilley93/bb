@@ -170,15 +170,10 @@ function writeMode(seatId: string) {
     return JSON.stringify({ ...current, mode: seatId });
   };
   const apply = (storage: Storage) => {
-    const keys: string[] = [];
-    for (let index = 0; index < storage.length; index += 1) {
-      const key = storage.key(index);
-      if (key?.startsWith("bb.promptbox.session-options-")) keys.push(key);
-    }
-    if (keys.length === 0) {
-      keys.push(`bb.promptbox.session-options-${encodeURIComponent("acp-opencode")}-1`);
-    }
-    for (const key of keys) storage.setItem(key, next(storage.getItem(key)));
+    const key = `bb.promptbox.session-options-${encodeURIComponent("acp-opencode")}-1`;
+    const current = storage.getItem(key);
+    const updated = next(current);
+    if (updated !== current) storage.setItem(key, updated);
   };
   apply(localStorage);
   apply(sessionStorage);
@@ -989,10 +984,32 @@ button[data-permission-alias="auto"] > span > span.truncate:not([data-promptbox-
   align-self: center !important;
   margin-left: 6px !important;
 }
+aside:has([data-testid='thread-secondary-panel-top-chrome']) {
+  --seat-tab-bar: color-mix(in oklab, var(--background) 95%, var(--foreground));
+  --seat-tab-line: color-mix(in oklab, var(--foreground) 10%, var(--background));
+  --seat-tab-active: var(--background);
+  --seat-tab-hover: color-mix(in oklab, var(--background) 70%, var(--seat-tab-bar));
+}
+[data-testid='thread-secondary-panel-top-chrome'] {
+  height: 35px !important;
+  min-height: 35px !important;
+  max-height: 35px !important;
+  background: var(--seat-tab-bar) !important;
+  align-items: stretch !important;
+}
+[data-testid='thread-secondary-panel-top-chrome'] > [data-sidebar-split-tab-group] {
+  height: 35px !important;
+  align-items: stretch !important;
+}
+[data-testid='secondary-panel-tab-strip'] {
+  height: 35px !important;
+  align-items: stretch !important;
+  gap: 0 !important;
+}
 [data-secondary-panel-tab-scroll-region],
 [data-secondary-panel-tab-scroll-region] > div:has([data-secondary-panel-tab-content]) {
   flex: 0 1 auto !important;
-  height: 100% !important;
+  height: 35px !important;
   min-width: 0 !important;
   max-width: 100% !important;
   background: transparent !important;
@@ -1000,7 +1017,7 @@ button[data-permission-alias="auto"] > span > span.truncate:not([data-promptbox-
 [data-secondary-panel-tab-content] {
   width: max-content !important;
   max-width: none !important;
-  height: 100% !important;
+  height: 35px !important;
   gap: 0 !important;
   align-items: stretch !important;
   background: transparent !important;
@@ -1012,87 +1029,134 @@ button[data-permission-alias="auto"] > span > span.truncate:not([data-promptbox-
 [data-secondary-panel-tab-content] > :not([id^="Dnd"]) {
   flex: 0 0 auto !important;
   display: flex !important;
-  width: 150px !important;
-  min-width: 110px !important;
-  max-width: 220px !important;
+  height: 35px !important;
+  width: fit-content !important;
+  min-width: 90px !important;
+  max-width: 180px !important;
 }
 [data-secondary-panel-tab-content] [data-tab-pill] {
   position: relative !important;
   flex: 1 1 auto !important;
   display: flex !important;
-  align-items: stretch !important;
+  align-items: center !important;
+  gap: 8px !important;
+  box-sizing: border-box !important;
   width: 100% !important;
-  height: 100% !important;
+  height: 35px !important;
+  padding: 0 10px 0 12px !important;
   border-radius: 0 !important;
-  border-right: 1px solid var(--border) !important;
-  background: transparent !important;
+  border-right: 1px solid var(--seat-tab-line) !important;
+  background: var(--seat-tab-bar) !important;
   color: var(--muted-foreground) !important;
   box-shadow: none !important;
 }
 [data-secondary-panel-tab-content] [data-tab-pill]:hover {
-  background: color-mix(in oklab, var(--foreground) 4%, transparent) !important;
+  background: var(--seat-tab-hover) !important;
 }
 [data-secondary-panel-tab-content] [data-tab-pill]:has(> button[aria-pressed="true"]) {
-  background: var(--background) !important;
+  background: var(--seat-tab-active) !important;
   color: var(--foreground) !important;
-  box-shadow: inset 0 1px 0 var(--foreground), 0 1px 0 var(--background) !important;
+  box-shadow: inset 0 1px 0 var(--foreground) !important;
 }
 [data-secondary-panel-tab-content] [data-tab-pill] > button:not([data-tab-pill-close]):not([aria-label^="Close "]) {
   flex: 1 1 auto !important;
   display: flex !important;
   align-items: center !important;
   justify-content: flex-start !important;
-  gap: 6px !important;
-  width: 100% !important;
+  gap: 8px !important;
   min-width: 0 !important;
   height: 100% !important;
-  padding: 0 30px 0 12px !important;
+  padding: 0 !important;
   border-radius: 0 !important;
   background: transparent !important;
   color: inherit !important;
   box-shadow: none !important;
+  font-size: 13px !important;
 }
 [data-secondary-panel-tab-content] [data-tab-pill] > button > span {
   opacity: 1 !important;
   margin-right: 0 !important;
 }
+[data-secondary-panel-tab-content] [data-tab-pill] > button > span:first-child {
+  width: 14px !important;
+  height: 14px !important;
+  flex: none !important;
+}
+[data-secondary-panel-tab-content] [data-tab-pill] > button > span:first-child svg {
+  width: 14px !important;
+  height: 14px !important;
+}
 [data-secondary-panel-tab-content] [data-tab-pill] .truncate {
   max-width: none !important;
   text-align: left !important;
+  font-size: 13px !important;
+  line-height: 1 !important;
 }
 [data-tab-pill-close],
 [data-secondary-panel-tab-content] button[aria-label^="Close "] {
-  position: absolute !important;
+  position: static !important;
+  flex: none !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  left: auto !important;
-  right: 6px !important;
-  top: 50% !important;
-  width: 18px !important;
-  height: 18px !important;
+  width: 16px !important;
+  height: 16px !important;
+  margin: 0 0 0 1px !important;
   padding: 0 !important;
-  border-radius: 4px !important;
-  opacity: 0.6 !important;
+  border-radius: 3px !important;
+  opacity: 0 !important;
   visibility: visible !important;
   pointer-events: auto !important;
-  transform: translateY(-50%) !important;
+  transform: none !important;
+  translate: none !important;
   color: inherit !important;
-  z-index: 2 !important;
+  inset: auto !important;
+}
+[data-tab-pill-close] svg,
+[data-secondary-panel-tab-content] button[aria-label^="Close "] svg {
+  width: 12px !important;
+  height: 12px !important;
 }
 [data-secondary-panel-tab-content] [data-tab-pill]:hover [data-tab-pill-close],
 [data-secondary-panel-tab-content] [data-tab-pill]:has(> button[aria-pressed="true"]) [data-tab-pill-close],
 [data-secondary-panel-tab-content] [data-tab-pill]:hover button[aria-label^="Close "],
 [data-secondary-panel-tab-content] [data-tab-pill]:has(> button[aria-pressed="true"]) button[aria-label^="Close "] {
-  opacity: 1 !important;
+  opacity: 0.8 !important;
 }
 [data-tab-pill-close]:hover,
 [data-secondary-panel-tab-content] button[aria-label^="Close "]:hover {
+  opacity: 1 !important;
   background: color-mix(in oklab, var(--foreground) 10%, transparent) !important;
+}
+[data-testid='thread-secondary-panel-top-chrome'] button[aria-label^="Open new tab"] {
+  width: 35px !important;
+  min-width: 35px !important;
+  height: 35px !important;
+  min-height: 35px !important;
+  border-radius: 0 !important;
+  align-self: center !important;
+}
+[data-testid='thread-info-tab'],
+[data-testid='thread-info-tab'] [data-tab-pill] {
+  height: 35px !important;
+}
+html[data-seat-term-light="true"] .xterm,
+html[data-seat-term-light="true"] .xterm .xterm-viewport,
+html[data-seat-term-light="true"] .xterm .xterm-screen {
+  background-color: #ffffff !important;
 }
 [data-new-thread-footer] button[aria-label^="Context window"],
 [data-follow-up-composer-footer] button[aria-label^="Context window"] {
   display: none !important;
+}
+[data-promptbox] button[aria-label="Collapse prompt box"],
+[data-promptbox] [data-promptbox-standard-actions]:has(> button[aria-label="Collapse prompt box"]) {
+  display: none !important;
+}
+div.max-w-full.rounded-xl.border-border-seam.bg-surface-recessed {
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: 0 !important;
 }
 aside[data-pane-view="terminal"] [data-pane-kind="info"],
 aside[data-pane-view="info"] [data-pane-kind="tabs"] {
@@ -1268,6 +1332,10 @@ svg[data-icon="Terminal"] > * {
 [data-seat-usage-track] > span {
   display: block;
   height: 100%;
+}
+[data-seat-picker]:not([data-seat-picker-placed]) {
+  visibility: hidden;
+  pointer-events: none;
 }
 [data-seat-picker] {
   position: fixed;
@@ -1729,6 +1797,9 @@ function ensureComposerBar() {
 const paneInfoIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" color="currentColor" data-icon="Info" data-icon-root="" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4" stroke="currentColor" stroke-width="1.5"></rect><path d="M8 8.5h.01M8 12h.01M8 15.5h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path><path d="M11.5 8.5H16M11.5 12H16M11.5 15.5H16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>`;
 
 function paintPaneInfoIcon() {
+  for (const rail of document.querySelectorAll('button[aria-label="Show thread info panel"] svg[data-icon="Info"]')) {
+    if (rail instanceof SVGElement && rail.querySelector("circle")) rail.outerHTML = paneInfoIcon;
+  }
   const button = document.querySelector(
     '[data-thread-header-pane-actions] > button[aria-label^="Show right panel"], [data-thread-header-pane-actions] > button[aria-label^="Hide right panel"]',
   );
@@ -1736,7 +1807,7 @@ function paintPaneInfoIcon() {
   button.classList.remove("hidden");
   if (button.hasAttribute("inert")) button.removeAttribute("inert");
   const icon = button.querySelector("svg");
-  if (icon instanceof SVGElement && icon.dataset.icon !== "Info") icon.outerHTML = paneInfoIcon;
+  if (icon instanceof SVGElement && (icon.dataset.icon !== "Info" || icon.querySelector("circle"))) icon.outerHTML = paneInfoIcon;
 }
 
 function placePanelUnderHeader() {
@@ -2214,6 +2285,7 @@ function placeSeatPicker() {
   const mid = top + Math.max(24, shellRect.top - top) / 2;
   picker.style.left = `${Math.round(shellRect.left + shellRect.width / 2)}px`;
   picker.style.top = `${Math.round(mid)}px`;
+  picker.dataset.seatPickerPlaced = "true";
 }
 
 let paneButtonsBound = false;
@@ -2565,7 +2637,50 @@ function paintVisionGuard() {
   box.insertBefore(warning, box.firstChild);
 }
 
+let colourProbe: CanvasRenderingContext2D | null = null;
+
+function rgbOf(css: string): [number, number, number] | null {
+  if (colourProbe === null) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1;
+    canvas.height = 1;
+    colourProbe = canvas.getContext("2d", { willReadFrequently: true });
+  }
+  if (colourProbe === null) return null;
+  colourProbe.clearRect(0, 0, 1, 1);
+  colourProbe.fillStyle = "#000";
+  colourProbe.fillStyle = css;
+  colourProbe.fillRect(0, 0, 1, 1);
+  const data = colourProbe.getImageData(0, 0, 1, 1).data;
+  return [data[0] ?? 0, data[1] ?? 0, data[2] ?? 0];
+}
+
+function paintTerminalWhite() {
+  const terminals = document.querySelectorAll(".xterm");
+  const root = document.documentElement;
+  if (terminals.length === 0) return;
+  const first = terminals[0];
+  if (!(first instanceof HTMLElement)) return;
+  const rgb = rgbOf(getComputedStyle(root).getPropertyValue("--sidebar").trim() || getComputedStyle(first).backgroundColor);
+  const light = rgb !== null && Math.min(...rgb) >= 235;
+  if (!light) {
+    if (root.dataset.seatTermLight) delete root.dataset.seatTermLight;
+    for (const canvas of document.querySelectorAll<HTMLElement>(".xterm canvas")) canvas.style.removeProperty("filter");
+    return;
+  }
+  const lift = 255 / Math.max(...rgb, 1);
+  const filter = lift > 1.0005 ? `brightness(${lift.toFixed(4)})` : "";
+  if (root.dataset.seatTermLight !== "true") root.dataset.seatTermLight = "true";
+  for (const canvas of document.querySelectorAll<HTMLElement>(".xterm canvas")) {
+    if (canvas.style.filter !== filter) {
+      if (filter) canvas.style.setProperty("filter", filter);
+      else canvas.style.removeProperty("filter");
+    }
+  }
+}
+
 function paintPaneChrome() {
+  paintTerminalWhite();
   bindPaneButtons();
   paintPaneView();
   paintPaneInfoIcon();
@@ -2636,6 +2751,20 @@ function rememberThread(seatId: string, threadId: string) {
   ids.push(threadId);
   threads[seatId] = ids.slice(-12);
   localStorage.setItem(rememberedKey, JSON.stringify(threads));
+}
+
+function focusComposerSoon() {
+  let attempts = 0;
+  const tryFocus = () => {
+    attempts += 1;
+    const editor = document.querySelector("[data-promptbox] .ProseMirror");
+    if (editor instanceof HTMLElement) {
+      if (document.activeElement !== editor) editor.focus();
+      return;
+    }
+    if (attempts < 8) window.setTimeout(tryFocus, 250);
+  };
+  window.setTimeout(tryFocus, 600);
 }
 
 let clickToken = 0;
@@ -2725,14 +2854,44 @@ const quietButton: CSSProperties = {
   padding: 0,
 };
 
+const seatTreeCacheKey = "boltrig.seatTreeCache";
+
+function readSeatTreeCache(): { nodes: Node[] } | null {
+  try {
+    const raw = localStorage.getItem(seatTreeCacheKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { nodes?: unknown; company?: unknown };
+    if (!Array.isArray(parsed.nodes) || parsed.nodes.length === 0) return null;
+    const nodes = parsed.nodes as Node[];
+    if (typeof parsed.company === "string") phoneWorkspaceName = parsed.company;
+    indexNodes(nodes);
+    return { nodes };
+  } catch {
+    return null;
+  }
+}
+
+function writeSeatTreeCache(nodes: Node[]) {
+  try {
+    localStorage.setItem(seatTreeCacheKey, JSON.stringify({ nodes, company: phoneWorkspaceName }));
+  } catch {
+    return;
+  }
+}
+
 export function SeatSidebar({ onNavigate, activeThreadId }: PluginThreadListProps) {
   const rpc = useRpc<typeof agentEditorRpc>();
   const sdk = useSdk();
   const navigate = useBbNavigate();
-  const [nodes, setNodes] = useState<Node[]>([]);
-  const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
+  const [cached] = useState(readSeatTreeCache);
+  const [nodes, setNodes] = useState<Node[]>(() => cached?.nodes ?? []);
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => {
+    if (!cached) return new Set();
+    const active = sessionStorage.getItem(folderKey) ?? sessionStorage.getItem(activeKey);
+    return active ? withOnlyHead(cached.nodes, new Set(), active) : new Set();
+  });
   const [status, setStatus] = useState<string | null>(null);
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(() => cached !== null);
   const [reload, setReload] = useState(0);
   const [currentThread, setCurrentThread] = useState<string | null>(() => {
     const match = window.location.pathname.match(/\/threads\/([^/]+)/);
@@ -2754,8 +2913,9 @@ export function SeatSidebar({ onNavigate, activeThreadId }: PluginThreadListProp
       indexNodes(next);
       publishHeadTrees(next);
       const active = sessionStorage.getItem(folderKey) ?? sessionStorage.getItem(activeKey);
+      writeSeatTreeCache(next);
       setNodes(next);
-      setOpen(active ? withOnlyHead(next, new Set(), active) : new Set());
+      setOpen((current) => (cached !== null && current.size > 0) ? current : active ? withOnlyHead(next, new Set(), active) : new Set());
       setStatus(null);
       setReady(true);
     }).catch((error: unknown) => {
@@ -2983,8 +3143,8 @@ export function SeatSidebar({ onNavigate, activeThreadId }: PluginThreadListProp
           ...(workspace ? { projectId: workspace.projectId } : {}),
           ...(workspace?.environmentId ? { environmentId: workspace.environmentId } : {}),
           agent: seatId,
-          focusPrompt: true,
         });
+        focusComposerSoon();
         seatMode(seatId);
       })();
     };
@@ -3032,8 +3192,8 @@ export function SeatSidebar({ onNavigate, activeThreadId }: PluginThreadListProp
         ...(workspace ? { projectId: workspace.projectId } : {}),
         ...(workspace?.environmentId ? { environmentId: workspace.environmentId } : {}),
         agent: seat.id,
-        focusPrompt: true,
       });
+      focusComposerSoon();
     })();
   };
 
@@ -3131,8 +3291,8 @@ export function SeatSidebar({ onNavigate, activeThreadId }: PluginThreadListProp
         projectId: workspace.projectId,
         environmentId,
         agent: seatId,
-        focusPrompt: true,
       });
+      focusComposerSoon();
     }).catch(() => undefined);
   };
   const folderIcon = (
@@ -3233,3 +3393,29 @@ export function SeatThreads({ threadId }: { threadId: string }) {
     </ul>
   );
 }
+
+let styleGuardInstalled = false;
+
+function installStyleGuard() {
+  if (styleGuardInstalled) return;
+  styleGuardInstalled = true;
+  ensureComposerBar();
+  new MutationObserver(() => {
+    if (!document.head.querySelector("style[data-seat-composer-bar]")) ensureComposerBar();
+  }).observe(document.head, { childList: true });
+  const reapply = () => {
+    ensureComposerBar();
+    paintPaneChrome();
+  };
+  for (const method of ["pushState", "replaceState"] as const) {
+    const original = history[method].bind(history);
+    history[method] = (...args: Parameters<History["pushState"]>) => {
+      const result = original(...args);
+      window.requestAnimationFrame(reapply);
+      return result;
+    };
+  }
+  window.addEventListener("popstate", () => window.requestAnimationFrame(reapply));
+}
+
+installStyleGuard();

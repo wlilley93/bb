@@ -102,8 +102,10 @@ export function ComposerRoot({
   const { runsPluginCommands } = host;
   const { isFocusedPane } = host;
   const editorRef = useRef(editor);
+  const registerEditorRef = useRef(registerEditor);
   useLayoutEffect(() => {
     editorRef.current = editor;
+    registerEditorRef.current = registerEditor;
   });
 
   const stateKey = JSON.stringify(editor.state);
@@ -115,7 +117,7 @@ export function ComposerRoot({
     if (previous !== null && previous.key !== key) previous.unregister();
     publishedRef.current = {
       key,
-      unregister: registerEditor({
+      unregister: registerEditorRef.current({
         state: editorRef.current.state,
         insertAtCursor: (value, block) =>
           editorRef.current.insertAtCursor(value, block),
@@ -125,7 +127,7 @@ export function ComposerRoot({
         isPopupOpen: () => editorRef.current.isPopupOpen(),
       }),
     };
-  }, [key, registerEditor, stateKey]);
+  }, [key, stateKey]);
   useEffect(() => () => publishedRef.current?.unregister(), []);
   useLayoutEffect(() => attachEditor(() => editorRef.current), [attachEditor]);
 

@@ -30,7 +30,7 @@ Saving a file updates its provenance line. A change that needs a permission is a
 
 The button runs the canon seed with `--company-root`. The seed reads `Duties/` and `Roles/` and writes the OpenCode config. OpenCode restarts only when `BOLTRIG_OPENCODE_RESTART` names the command.
 
-## Chat window chrome and the Info pane (0.2.0)
+## Chat window chrome and the Info pane (0.3.0)
 
 `seat-sidebar.tsx` restyles the composer footer (model, effort, permission and a context ring on one line), the tab strip, and the top-bar Terminal and Info buttons, and keeps the two right-hand panes separate:
 
@@ -44,7 +44,16 @@ Layer: bb plugin only. Nothing in the bb core, the OpenCode config or the Boltri
 
 1. On the build machine: `pnpm exec vitest run --config vitest.config.ts` here, then `bb plugin build plugins/agent-editor`. That writes a self-contained `dist/` (server.js, app.js, app.css and their meta files).
 2. Package the folder holding `package.json` and `dist/` (the sources are not needed) and copy it to the client machine.
-3. On the client machine: `bb plugin install <folder> --yes`. To update: replace the folder with the new build and run `bb plugin reload boltrig-agent-editor`; `bb plugin list` shows the version (0.2.0).
+3. On the client machine: `bb plugin install <folder> --yes`. To update: replace the folder with the new build and run `bb plugin reload boltrig-agent-editor`; `bb plugin list` shows the version (0.3.0).
 4. A `git:` install from this monorepo is not ready: the devDependencies use `workspace:*`. It needs the plugin in its own repository with the SDK pinned (`bb plugin types`).
 
 The rewriting of raw provider errors lives in bb core (`packages/thread-view`, branch `boltrig/friendly-provider-errors`) and reaches a client only with a bb build that contains it; the stock npm bb-app does not have it.
+
+## 0.3.0 changes
+
+- Styles are injected when the plugin module loads, re-inserted if removed, and re-applied after every history navigation.
+- The seat tree is cached in `localStorage` (`boltrig.seatTreeCache`) so the sidebar never shows "Loading seats" after the first run; the seat picker stays hidden until positioned.
+- Right-panel tabs are 35px VS Code-style blocks; the terminal reads as pure white in light themes; the circle-i is replaced by the dots-and-lines icon everywhere.
+- User message bubbles lose their stroke; the lone composer collapse chevron (`aria-label="Collapse prompt box"`) is hidden.
+- Seat selection writes the session mode only into the `acp-opencode` key and only when it changed.
+- Includes the new-session agent picker and the Claude-style model picker.

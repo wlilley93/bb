@@ -453,3 +453,7 @@ export default definePluginApp((app) => {
     component: UsageInfoSection,
   });
 });
+import { installAgentPicker } from "./new-session-agent-picker.js"; // lane-B
+installAgentPicker(); // lane-B
+import { installModelPicker } from "./model-picker.js"; // lane-C
+installModelPicker(); // lane-C
