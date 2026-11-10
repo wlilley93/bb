@@ -419,20 +419,22 @@ const RECORD_NAMES = ["function.json", "client.json", "project.json", "queue.jso
 const SCAN_SKIP = new Set(["node_modules", ".git", "Library", "Backups", "dist", "build", ".next", "target", "coverage", ".cache", ".venv", "Pods"]);
 const SCAN_DEPTH = 3;
 
-interface HomeMatch { path: string; depth: number }
+interface HomeMatch { path: string; depth: number; tier: string }
+
+const RECORD_TIERS = new Set(["head", "vp", "pm", "seat", "none"]);
 
 /**
  * The folder owns the agent, as OpenChamber's home scan does. A `.meta` record
  * names `agent_profile`. One folder for that profile opens that folder. Several
  * folders open the head's folder, which is the one place that profile's domain lives.
  */
-export async function listSeatFolders(root: string): Promise<Array<{ path: string; name: string; seat: string }>> {
+export async function listSeatFolders(root: string): Promise<Array<{ path: string; name: string; seat: string; tier: string }>> {
   const homes = await recordedHomes(root);
-  const folders: Array<{ path: string; name: string; seat: string }> = [];
+  const folders: Array<{ path: string; name: string; seat: string; tier: string }> = [];
   for (const [seat, matches] of homes) {
     if (!ID.test(seat)) continue;
     for (const match of matches) {
-      folders.push({ path: match.path, name: path.basename(match.path), seat });
+      folders.push({ path: match.path, name: path.basename(match.path), seat, tier: match.tier });
     }
   }
   folders.sort((left, right) => left.name.localeCompare(right.name) || left.path.localeCompare(right.path));
@@ -469,12 +471,12 @@ async function recordedHomes(root: string): Promise<Map<string, HomeMatch[]>> {
 }
 
 async function walkHomes(root: string, directory: string, depth: number, homes: Map<string, HomeMatch[]>): Promise<void> {
-  const profile = await readProfile(directory);
-  if (profile && ID.test(profile)) {
-    const list = homes.get(profile);
-    const match = { path: directory, depth };
+  const record = await readProfile(directory);
+  if (record && ID.test(record.profile)) {
+    const list = homes.get(record.profile);
+    const match = { path: directory, depth, tier: record.tier };
     if (list) list.push(match);
-    else homes.set(profile, [match]);
+    else homes.set(record.profile, [match]);
   }
   if (depth >= SCAN_DEPTH) return;
   let entries;
@@ -496,7 +498,15 @@ async function walkHomes(root: string, directory: string, depth: number, homes: 
   }
 }
 
-async function readProfile(directory: string): Promise<string | null> {
+function recordTier(profile: string, declared: unknown): string {
+  if (typeof declared === "string" && RECORD_TIERS.has(declared.trim())) return declared.trim();
+  if (profile === "none") return "none";
+  const prefix = profile.split("-", 1)[0];
+  if (prefix === "head" || prefix === "vp" || prefix === "pm") return prefix;
+  return "seat";
+}
+
+async function readProfile(directory: string): Promise<{ profile: string; tier: string } | null> {
   const metadata = path.join(directory, ".meta");
   let entries;
   try {
@@ -513,12 +523,16 @@ async function readProfile(directory: string): Promise<string | null> {
   try {
     if ((await lstat(file)).size > 65_536) return null;
     const parsed: unknown = JSON.parse(await readFile(file, "utf8"));
-    if (typeof parsed !== "object" || parsed === null || !("agent_profile" in parsed)) return null;
-    const profile = parsed.agent_profile;
-    return typeof profile === "string" ? profile.trim() : null;
+    if (!isRecord(parsed) || typeof parsed.agent_profile !== "string") return null;
+    const id = parsed.agent_profile.trim();
+    return { profile: id, tier: recordTier(id, parsed.tier) };
   } catch {
     return null;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isWithin(root: string, target: string): boolean {

@@ -16,7 +16,7 @@ import {
   saveSeatRequest,
   writeSharedRoot,
 } from "./company-directory.js";
-import { liveHeadFolders, nestSeatFolders } from "./seat-folders.js";
+import { homeRows, liveHeadFolders, nestSeatFolders } from "./seat-folders.js";
 
 const packDir = path.join(import.meta.dirname, "..", "..", "..", "..", "boltrig-opencode-company-SOP");
 const configPackage = path.join(import.meta.dirname, "..", "..", "..", "..", "boltrig-opencode-config");
@@ -186,15 +186,36 @@ describe("folder for a seat", () => {
     expect(listed.map((folder) => folder.name).sort()).toEqual(
       ["Family Operations", "Health and Wellbeing", "Home", "Personal Operations", "Travel"].sort(),
     );
+    expect(listed.find((folder) => folder.name === "Personal Operations")?.tier).toBe("head");
+    expect(listed.find((folder) => folder.name === "Travel")?.tier).toBe("vp");
+  });
+
+  it("reads a declared tier from the home record", async () => {
+    const rootParent = await mkdtemp(path.join(tmpdir(), "boltrig-homes-"));
+    dirs.push(rootParent);
+    const root = path.join(rootParent, "home");
+    const standards = path.join(root, "Standards");
+    await mkdir(path.join(standards, ".meta"), { recursive: true });
+    await writeFile(path.join(standards, ".meta", "function.json"), JSON.stringify({
+      agent_profile: "head-engineering",
+      tier: "seat",
+    }));
+    const listed = await listSeatFolders(await realpath(root));
+    expect(listed).toEqual([{
+      path: await realpath(standards),
+      name: "Standards",
+      seat: "head-engineering",
+      tier: "seat",
+    }]);
   });
 
   it("stops the tree at a PM folder", () => {
     const nested = nestSeatFolders([
-      { path: "/h/Projects", name: "Projects", seat: "head-projects" },
-      { path: "/h/Projects/Boltrig", name: "Boltrig", seat: "vp-projects" },
-      { path: "/h/Projects/Boltrig/bb", name: "bb", seat: "pm-projects" },
-      { path: "/h/Projects/Boltrig/bb/worktrees", name: "worktrees", seat: "pm-projects" },
-      { path: "/h/Projects/liaison", name: "liaison", seat: "pm-projects" },
+      { path: "/h/Projects", name: "Projects", seat: "head-projects", tier: "head" },
+      { path: "/h/Projects/Boltrig", name: "Boltrig", seat: "vp-projects", tier: "vp" },
+      { path: "/h/Projects/Boltrig/bb", name: "bb", seat: "pm-projects", tier: "pm" },
+      { path: "/h/Projects/Boltrig/bb/worktrees", name: "worktrees", seat: "pm-projects", tier: "pm" },
+      { path: "/h/Projects/liaison", name: "liaison", seat: "pm-projects", tier: "pm" },
     ], new Set(["pm-projects"]));
     expect(nested.map((folder) => folder.name)).toEqual(["Projects"]);
     expect(nested[0]?.children.map((folder) => folder.name)).toEqual(["Boltrig", "liaison"]);
@@ -203,9 +224,24 @@ describe("folder for a seat", () => {
   });
 
   it("keeps the shallower folder when a head is copied deeper", () => {
-    const live = { path: "/h/Research", name: "Research", seat: "head-research", children: [] };
-    const copy = { path: "/h/Backups/research-three-vps-20261105", name: "research-three-vps-20261105", seat: "head-research", children: [] };
+    const live = { path: "/h/Research", name: "Research", seat: "head-research", tier: "head", children: [] };
+    const copy = { path: "/h/Backups/research-three-vps-20261105", name: "research-three-vps-20261105", seat: "head-research", tier: "head", children: [] };
     expect(liveHeadFolders([copy, live]).map((folder) => folder.name)).toEqual(["Research"]);
+  });
+
+  it("shows a head only when a folder record names it", () => {
+    const seats = [
+      { id: "head-engineering", tier: "head" },
+      { id: "head-projects", tier: "head" },
+      { id: "vp-projects", tier: "vp" },
+    ];
+    const rows = homeRows(seats, [
+      { path: "/h/Engineering", name: "Engineering", seat: "head-engineering", tier: "seat" },
+      { path: "/h/Projects", name: "Projects", seat: "head-projects", tier: "head" },
+      { path: "/h/Projects/Boltrig", name: "Boltrig", seat: "vp-projects", tier: "vp" },
+    ]);
+    expect(rows.map((row) => row.folder.name)).toEqual(["Projects"]);
+    expect(rows[0]?.children.map((row) => row.folder.name)).toEqual(["Boltrig"]);
   });
 
   it("adds an index line when a reference is saved", async () => {

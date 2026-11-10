@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { definePluginApp, useRpc, type PluginSettingsSectionProps } from "@get-bb/plugin-sdk/app";
 import { agentEditorRpc } from "./server.js";
+import { ContextInfoSection, EnvironmentInfoSection, UsageInfoSection } from "./context-info.js";
 import { SeatSidebar, SeatThreads } from "./seat-sidebar.js";
 import { SopFiles } from "./sop-files.js";
 import { Area, Choice, Field, Fold, GroupHeading, Hit, Note, Page, Pick, Primary, Quiet, Read, ScrollFade, SearchField, SeatMark, TextField, accent, appear, fieldControl, focusRing, listPage, scrollRowIntoList, stroke } from "./chrome.js";
@@ -432,5 +433,23 @@ export default definePluginApp((app) => {
     title: "Threads",
     group: "seat",
     component: SeatThreads,
+  });
+  app.slots.experimental_threadInfoSection({
+    id: "environment",
+    group: "0_context",
+    order: 0,
+    component: EnvironmentInfoSection,
+  });
+  app.slots.experimental_threadInfoSection({
+    id: "context",
+    group: "0_context",
+    order: 1,
+    component: ContextInfoSection,
+  });
+  app.slots.experimental_threadInfoSection({
+    id: "usage",
+    group: "0_context",
+    order: 2,
+    component: UsageInfoSection,
   });
 });

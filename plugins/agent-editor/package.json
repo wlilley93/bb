@@ -1,6 +1,6 @@
 {
-  "name": "bb-plugin-bb--agent-editor",
-  "version": "0.1.0",
+  "name": "bb-plugin-boltrig-agent-editor",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "by Boltrig.ai",

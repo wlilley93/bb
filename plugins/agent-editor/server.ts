@@ -3,6 +3,8 @@ import {
   type BbPluginApi,
 } from "@get-bb/plugin-sdk";
 import { z } from "zod";
+import { estimateContext } from "./context-estimate.js";
+import { answerVision, loadVisionMap } from "./model-vision.js";
 import { homedir } from "node:os";
 import path from "node:path";
 import {
@@ -45,7 +47,7 @@ export const agentEditorRpc = defineRpcContract({
   folders: {
     input: z.null(),
     output: z.object({
-      folders: z.array(z.object({ path: z.string(), name: z.string(), seat: z.string() }).strict()),
+      folders: z.array(z.object({ path: z.string(), name: z.string(), seat: z.string(), tier: z.string() }).strict()),
       company: z.string(),
     }).strict(),
   },
@@ -96,6 +98,32 @@ export const agentEditorRpc = defineRpcContract({
   saveFile: {
     input: z.object({ path: z.string(), body: z.string() }).strict(),
     output: z.object({ path: z.string() }).strict(),
+  },
+  estimateContext: {
+    input: z.object({
+      cwd: z.string().nullable(),
+      usedTokens: z.number().nonnegative(),
+      windowTokens: z.number().nonnegative(),
+    }).strict(),
+    output: z.object({
+      estimated: z.literal(true),
+      measuredTokens: z.number(),
+      note: z.string(),
+      categories: z.array(z.object({
+        id: z.string(),
+        label: z.string(),
+        kind: z.enum(["used", "free", "reserved", "deferred"]),
+        tokens: z.number(),
+        entries: z.array(z.object({ id: z.string(), label: z.string(), tokens: z.number() }).strict()),
+      }).strict()),
+    }).strict(),
+  },
+  modelVision: {
+    input: z.object({ displayName: z.string().min(1) }).strict(),
+    output: z.object({
+      image: z.boolean().nullable(),
+      source: z.enum(["known-rejection", "catalog", "unknown"]),
+    }).strict(),
   },
   addPermission: {
     input: z.object({
@@ -192,6 +220,17 @@ export function registerAgentEditor(bb: BbPluginApi, options: AgentEditorOptions
       await saveCompanyFile(await ensureCompanyDirectory(await root(), options.layout.packDir).catch(fail), relative, body, today).catch(fail);
       return { path: relative };
     },
+    estimateContext: async ({ cwd, usedTokens, windowTokens }) => estimateContext({
+      cwd,
+      usedTokens,
+      windowTokens,
+      opencodeDir: options.layout.opencodeDir,
+      home: homedir(),
+    }),
+    modelVision: async ({ displayName }) => answerVision(
+      await loadVisionMap(path.join(homedir(), ".cache", "boltrig", "model-vision.json")),
+      displayName,
+    ),
     addPermission: async (row) => {
       await addPermissionRequest(await ensureCompanyDirectory(await root(), options.layout.packDir).catch(fail), row, today).catch(fail);
       return { path: "policies/POLICY-REGISTER.md" };

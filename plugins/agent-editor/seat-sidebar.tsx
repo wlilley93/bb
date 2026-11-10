@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { useBbNavigate, useRpc, useSdk, type PluginThreadListProps } from "@get-bb/plugin-sdk/app";
 import { agentEditorRpc } from "./server.js";
 import { focusRing, seatTone } from "./chrome.js";
-import { liveHeadFolders, nestSeatFolders, type NestedSeatFolder, type SeatFolder } from "./seat-folders.js";
+import { homeRows, type SeatFolder } from "./seat-folders.js";
 
 interface Seat {
   id: string;
@@ -27,12 +27,10 @@ interface Node {
  * - Only the head on screen is expanded. The folders above the open row stay open with it.
  * - Only the folder on screen is highlighted, with the theme highlight, and the highlight stays on that row. A row lights on hover.
  * - The composer starts as one line, with its controls underneath, and scrolls after 17 lines.
- * - The seat name is drawn over the composer, not inserted into it. The page is not watched for every change. A burst of seat clicks changes the composer once, after the clicks settle. The agent menu is not closed with Escape. The list says it is loading until the seats arrive. A row's name cannot be dragged into a selection. The phone menu does not animate when motion is reduced. A seat name and its fold show a focus ring from the keyboard. The fold mark darkens when the pointer or the keyboard is on it. The threads beside the chat use the same row size as the seats.
+ * - The seat name is drawn over the composer, not inserted into it. The page is not watched for every change. A burst of seat clicks changes the composer once, after the clicks settle. The agent menu is not closed with Escape. The list says it is loading until the seats arrive. A row's name cannot be dragged into a selection. The phone menu does not animate when motion is reduced. A seat name and its fold show a focus ring from the keyboard. The fold mark darkens when the pointer or the keyboard is on it. The threads beside the chat use the same row size as the seats. The fold mark sits at the end of the row. A failed list can be tried again. The open row stays clear of the phone bar. A seat row darkens while it is pressed. A long thread name beside the chat can be read on hover. The fold mark stays still when motion is reduced. The update control stays in Settings. Each seat row is inset from the sides of the sidebar. Clicking a seat starts a fresh chat for that seat. The agent menu is not opened, and nothing watches the whole page.
  * - New thread, including the phone plus, opens a fresh chat for the seat already on screen.
  * - On a phone the sidebar fills the screen. Five controls share the full width: three chosen icons, a chevron that pops a menu you can drag, and new thread. The footer icon row stays hidden. The menu is two-thirds of the bar, starting a tenth of the way in. Its title is the workspace, with settings on the right, in a slightly smaller font. It lists the other sections, the file browser, and the bug report. A row darkens while it is pressed, and so does a bar icon. Picking a seat closes the menu. The open seat stays in view. The swipe tracks the full width of the screen, and the bar leaves as soon as the drawer closes. The fold control is large enough to hit. The open section is marked. Escape closes the menu. Customise picks the three. Row text is larger.
  */
-const managed = new Set(["head", "vp", "pm"]);
-const loose = new Set(["vp", "pm"]);
 const rememberedKey = "boltrig.seatThreads";
 const pendingKey = "boltrig.seatPending";
 const leftKey = "boltrig.seatLeft";
@@ -40,80 +38,12 @@ const activeKey = "boltrig.activeSeat";
 const folderKey = "boltrig.activeFolder";
 const tierKey = "boltrig.activeTier";
 const closedKey = "boltrig.seatClosed";
-function parentOf(seat: Seat, ids: Set<string>): string | null {
-  if (seat.tier === "vp" && seat.id.startsWith("vp-")) {
-    const head = `head-${seat.id.slice(3)}`;
-    if (ids.has(head)) return head;
-  }
-  if (seat.tier === "pm" && seat.id.startsWith("pm-")) {
-    const vp = `vp-${seat.id.slice(3)}`;
-    if (ids.has(vp)) return vp;
-    const head = `head-${seat.id.slice(3)}`;
-    if (ids.has(head)) return head;
-  }
-  return null;
-}
-
-function tree(seats: readonly Seat[]): Node[] {
-  const ids = new Set(seats.map((seat) => seat.id));
-  const byParent = new Map<string | null, Seat[]>();
-  for (const seat of seats) {
-    const parent = parentOf(seat, ids);
-    const key = parent && ids.has(parent) ? parent : null;
-    const list = byParent.get(key);
-    if (list) list.push(seat);
-    else byParent.set(key, [seat]);
-  }
-  const visit = (parent: string | null): Node[] =>
-    [...(byParent.get(parent) ?? [])]
-      .sort((left, right) => left.id.localeCompare(right.id))
-      .map((seat) => ({ seat, folder: null, children: visit(seat.id) }));
-  return visit(null);
-}
-
 function nodeKey(node: Node): string {
   return node.folder?.path ?? node.seat.id;
 }
 
 function rowName(node: Node): string {
   return node.folder?.name ?? folderName(node.seat.id);
-}
-
-/** Heads come from the folders on disk. A head with no folder keeps a row of its own. */
-function folderTree(seats: readonly Seat[], folders: readonly SeatFolder[]): Node[] {
-  const byId = new Map(seats.map((seat) => [seat.id, seat]));
-  const kept = folders.filter((folder) => {
-    const seat = byId.get(folder.seat);
-    return Boolean(seat && managed.has(seat.tier) && !loose.has(seat.id));
-  });
-  const pm = new Set(seats.filter((seat) => seat.tier === "pm").map((seat) => seat.id));
-  const visit = (folder: NestedSeatFolder): Node | null => {
-    const seat = byId.get(folder.seat);
-    if (!seat) return null;
-    const children = folder.children.flatMap((child) => {
-      const node = visit(child);
-      return node ? [node] : [];
-    });
-    return { seat, folder, children };
-  };
-  const roots: Node[] = [];
-  const placed = new Set<string>();
-  const nested = nestSeatFolders(kept, pm);
-  const heads = liveHeadFolders(nested.filter((folder) => byId.get(folder.seat)?.tier === "head"));
-  for (const folder of heads) {
-    const seat = byId.get(folder.seat);
-    if (!seat || seat.tier !== "head") continue;
-    const node = visit(folder);
-    if (!node) continue;
-    roots.push(node);
-    placed.add(seat.id);
-  }
-  for (const seat of seats) {
-    if (seat.tier !== "head" || loose.has(seat.id) || placed.has(seat.id)) continue;
-    roots.push({ seat, folder: null, children: [] });
-  }
-  roots.sort((left, right) => left.seat.id.localeCompare(right.seat.id));
-  return roots;
 }
 
 const agentTreesKey = "boltrig.agentTrees";
@@ -303,27 +233,59 @@ function paintSeatName() {
 }
 
 const COMPOSER_BAR_STYLE = `
-[data-promptbox]:not([data-promptbox-compact]) [data-promptbox-editor-scroll] {
-  min-height: calc(1.7em + 16px) !important;
-  max-height: calc(1.7em * 17 + 16px) !important;
-  height: auto !important;
-  padding-top: 8px !important;
-  padding-bottom: 8px !important;
-  padding-left: 32px !important;
+[data-seat-vision-warning] {
+  margin: 8px 12px 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--destructive);
+  background: color-mix(in oklab, var(--destructive) 10%, transparent);
 }
-[data-promptbox]:not([data-promptbox-compact]) button[aria-label="Prompt actions"] {
+[data-promptbox]:not([data-promptbox-compact]):not([data-promptbox-voice-active]) [data-promptbox-editor-scroll] {
+  display: flex !important;
+  align-items: center !important;
+  min-height: 40px !important;
+  max-height: calc(1.7em * 17 + 20px) !important;
+  height: auto !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  padding-left: 45px !important;
+  padding-right: 45px !important;
+}
+[data-promptbox]:not([data-promptbox-compact]):not([data-promptbox-voice-active]):not(:has(.ProseMirror p.is-editor-empty)) [data-promptbox-editor-scroll],
+[data-promptbox]:not([data-promptbox-compact]):not([data-promptbox-voice-active]):has([aria-label="Stop run"]) [data-promptbox-editor-scroll] {
+  padding-right: 68px !important;
+}
+[data-promptbox]:not([data-promptbox-compact]):not([data-promptbox-voice-active]) [data-promptbox-editor-content] .ProseMirror {
+  min-height: 0 !important;
+  height: auto !important;
+}
+[data-promptbox]:not([data-promptbox-compact]) .ProseMirror p.is-editor-empty:first-child::before {
+  content: "Type / for a command" !important;
+}
+[data-promptbox]:not([data-promptbox-compact]):not([data-promptbox-voice-active]) button[aria-label="Prompt actions"] {
   position: absolute !important;
-  left: -2px !important;
-  bottom: 46px !important;
+  left: 19px !important;
+  bottom: calc(100% + 11px) !important;
+  top: auto !important;
   z-index: 3;
   width: 20px !important;
   height: 20px !important;
   min-width: 0 !important;
   padding: 0 !important;
-  color: #737373 !important;
+  color: #191919 !important;
 }
 [data-promptbox]:not([data-promptbox-compact]) button[aria-label="Prompt actions"] svg {
-  color: #737373 !important;
+  color: #191919 !important;
+  opacity: 0 !important;
+}
+[data-promptbox]:not([data-promptbox-compact]):not([data-promptbox-voice-active]) button[aria-label="Prompt actions"] {
+  background-color: transparent !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14' fill='none'%3E%3Cpath d='M7 1.5v11M1.5 7h11' stroke='%23191919' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  background-size: 14px 14px !important;
 }
 [data-promptbox-compact] [data-promptbox-editor-scroll] {
   min-height: 48px !important;
@@ -356,6 +318,12 @@ const COMPOSER_BAR_STYLE = `
 }
 button[aria-label="Agent options"] {
   visibility: hidden !important;
+  position: absolute !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
 }
 body > [data-seat-name] {
   position: fixed;
@@ -372,6 +340,10 @@ body > [data-seat-name] {
   white-space: nowrap;
   opacity: 1;
   pointer-events: none;
+}
+[data-testid="sidebar-update-button"],
+[data-sidebar="panel"] li:has([data-testid="sidebar-update-button"]) {
+  display: none !important;
 }
 @media (max-width: 767px) {
   [data-sidebar="panel"] {
@@ -401,9 +373,13 @@ body > [data-seat-name] {
     height: 44px !important;
     font-size: 17px !important;
   }
-  [data-sidebar="panel"] nav[aria-label="Seats"] button[aria-expanded] {
+  [data-sidebar="panel"] nav[aria-label="Seats"] button[aria-expanded],
+  [data-sidebar="panel"] nav[aria-label="Seats"] [data-fold-space] {
     width: 32px !important;
     height: 32px !important;
+  }
+  [data-sidebar="panel"] nav[aria-label="Seats"] [data-seat-row] {
+    scroll-margin-bottom: calc(80px + env(safe-area-inset-bottom));
   }
   [data-sidebar="panel"] .grid > div:has([data-testid="app-nav-rail"]) {
     width: 0 !important;
@@ -506,6 +482,9 @@ body > [data-seat-name] {
     }
     body > [data-phone-menu][data-closed="true"] {
       transform: none;
+    }
+    nav[aria-label="Seats"] [data-fold-mark] {
+      transition: none;
     }
   }
   body > [data-phone-menu] [data-phone-grab] {
@@ -645,14 +624,689 @@ aside:has([data-testid="thread-secondary-panel-top-chrome"]) .bg-sidebar {
 [data-thread-header-pane-actions] > button[aria-label^="Hide right panel"] {
   display: inline-flex !important;
 }
-nav[aria-label="Seats"] [data-indent-guide] {
-  opacity: 0;
+[data-new-thread-footer] > div:first-child,
+[data-follow-up-composer-footer] > div:first-child {
+  display: none !important;
 }
-nav[aria-label="Seats"] [data-indent-group]:not(:has([data-indent-group])) > [data-indent-guide] {
-  opacity: 1;
+[data-new-thread-footer],
+[data-follow-up-composer-footer] {
+  justify-content: flex-end !important;
+  margin-top: 0 !important;
+  transition: none !important;
 }
-nav[aria-label="Seats"]:hover [data-indent-guide] {
-  opacity: 1;
+[data-promptbox-shell]:has([data-new-thread-footer]),
+[data-follow-up-composer] {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+[data-promptbox]:not([data-promptbox-compact]) [data-promptbox-input-region] {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--background);
+  box-shadow: 0 2px 10px color-mix(in oklab, black 6%, transparent);
+}
+[data-promptbox]:not([data-promptbox-compact]):not([data-promptbox-voice-active]) [data-promptbox-action-row] {
+  position: relative !important;
+  display: flex !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  flex-wrap: nowrap !important;
+  gap: 0 !important;
+}
+[data-promptbox-shell]:has(> [data-new-thread-footer]) [data-promptbox]:not([data-promptbox-compact]):not([data-promptbox-voice-active]) [data-promptbox-action-row],
+[data-follow-up-composer]:has(> [data-follow-up-composer-footer]) [data-promptbox]:not([data-promptbox-compact]):not([data-promptbox-voice-active]) [data-promptbox-action-row] {
+  margin-top: 6px !important;
+}
+[data-promptbox]:not([data-promptbox-compact]):not([data-promptbox-voice-active]) [data-promptbox-standard-actions] {
+  position: static !important;
+  transform: none !important;
+  translate: none !important;
+  will-change: auto !important;
+}
+[data-promptbox]:not([data-promptbox-compact]):not([data-promptbox-voice-active]) [data-promptbox-action-row] > [data-promptbox-standard-actions]:has(button[aria-label^="Provider, model"]) {
+  flex: none !important;
+  width: auto !important;
+  min-width: 0 !important;
+  margin-left: auto !important;
+}
+[data-promptbox]:not([data-promptbox-compact]):not([data-promptbox-voice-active]) [data-promptbox-action-row] > [data-promptbox-standard-actions]:has(button[aria-label="Start voice input"]) {
+  flex: none !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  overflow: visible !important;
+}
+[data-promptbox]:not([data-promptbox-compact]):not([data-promptbox-voice-active]) [data-promptbox-action-row] [data-promptbox-standard-actions] > span {
+  position: static !important;
+}
+[data-promptbox]:not([data-promptbox-compact]):not([data-promptbox-voice-active]) button[aria-label="Start voice input"] {
+  position: absolute !important;
+  right: 14px !important;
+  bottom: calc(100% + 11px) !important;
+  top: auto !important;
+  z-index: 4;
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px !important;
+  min-height: 20px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  color: #191919 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+[data-promptbox]:not([data-promptbox-compact]):not([data-promptbox-voice-active]) button[aria-label="Start voice input"] svg {
+  color: #191919 !important;
+}
+[data-promptbox-shell]:has(> [data-new-thread-footer]) [data-promptbox]:not([data-promptbox-compact]):not([data-promptbox-voice-active]) button[aria-label="Prompt actions"],
+[data-promptbox-shell]:has(> [data-new-thread-footer]) [data-promptbox]:not([data-promptbox-compact]):not([data-promptbox-voice-active]) button[aria-label="Start voice input"],
+[data-promptbox-shell]:has(> [data-new-thread-footer]) [data-promptbox]:not([data-promptbox-compact]):not([data-promptbox-voice-active]) [data-promptbox-submit-group] {
+  bottom: calc(100% + 17px) !important;
+}
+[data-promptbox]:not([data-promptbox-compact]):not([data-promptbox-voice-active]) [data-promptbox-submit-group] {
+  position: absolute !important;
+  right: 42px !important;
+  bottom: calc(100% + 11px) !important;
+  top: auto !important;
+  z-index: 3;
+  margin: 0 !important;
+}
+[data-promptbox]:not([data-promptbox-compact]):has(.ProseMirror p.is-editor-empty) [data-promptbox-submit-group]:not(:has([aria-label="Stop run"])):not(:has([aria-label="Start voice input"])) {
+  display: none !important;
+}
+[data-promptbox]:not([data-promptbox-compact]) [data-promptbox-send-menu] {
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  color: #191919 !important;
+  opacity: 1 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+[data-promptbox]:not([data-promptbox-compact]) [data-promptbox-send-menu] button[aria-label="Send options"] {
+  display: none !important;
+}
+[data-promptbox]:not([data-promptbox-compact]) [data-promptbox-submit-group] button[type="submit"] {
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background-color: transparent !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M13.3 2.7v4.6a2.7 2.7 0 0 1-2.7 2.7H2.7M6 6.7 2.7 10 6 13.3' stroke='%23191919' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  background-size: 16px 16px !important;
+  color: #191919 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+}
+[data-promptbox]:not([data-promptbox-compact]) [data-promptbox-submit-group] button[type="submit"] svg {
+  opacity: 0 !important;
+}
+[data-promptbox][data-promptbox-voice-active]:not([data-promptbox-compact]) [data-promptbox-action-row] {
+  position: relative !important;
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  gap: 8px !important;
+}
+[data-promptbox-voice-active]:not([data-promptbox-compact]) [data-promptbox-editor-scroll] {
+  min-height: 40px !important;
+  visibility: hidden !important;
+}
+[data-promptbox-voice-active] button[aria-label="Prompt actions"],
+[data-promptbox-voice-active] button[aria-label="Start voice input"] {
+  display: none !important;
+}
+[data-promptbox-voice-active] [data-promptbox-standard-actions] {
+  opacity: 1 !important;
+  transform: none !important;
+  translate: none !important;
+}
+[data-promptbox-voice-active] [data-promptbox-voice-controls] {
+  position: absolute !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 100% !important;
+  top: auto !important;
+  z-index: 2 !important;
+  display: block !important;
+  width: auto !important;
+  height: 42px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  opacity: 1 !important;
+  transform: none !important;
+  translate: none !important;
+  pointer-events: none !important;
+  background: transparent !important;
+}
+[data-promptbox-voice-active] [data-promptbox-voice-controls] > div {
+  position: static !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  pointer-events: none !important;
+}
+[data-promptbox-voice-active] [data-voice-waveform],
+[data-promptbox-voice-active] [data-promptbox-voice-controls] div:has(> div > canvas) {
+  position: absolute !important;
+  left: 11px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  width: 4.5rem !important;
+  min-width: 4.5rem !important;
+  max-width: 4.5rem !important;
+  height: 1.25rem !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  color: var(--foreground) !important;
+  pointer-events: none !important;
+}
+[data-promptbox-voice-active] [data-voice-waveform] > div,
+[data-promptbox-voice-active] [data-promptbox-voice-controls] div:has(> div > canvas) > div,
+[data-promptbox-voice-active] [data-promptbox-voice-controls] canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block !important;
+}
+[data-promptbox-voice-active] [data-promptbox-voice-controls] button {
+  display: none !important;
+}
+[data-promptbox-voice-active] [data-voice-stop],
+[data-promptbox-voice-active] [data-promptbox-voice-controls] button[aria-label="Stop and add to draft"],
+[data-promptbox-voice-active] [data-promptbox-voice-controls] button[aria-label="Transcribing voice input"] {
+  display: inline-flex !important;
+  position: absolute !important;
+  right: 11px !important;
+  top: 50% !important;
+  left: auto !important;
+  bottom: auto !important;
+  transform: translateY(-50%) !important;
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  min-height: 22px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: 9999px !important;
+  border: 1.5px solid var(--destructive) !important;
+  background: transparent !important;
+  color: transparent !important;
+  box-shadow: none !important;
+  pointer-events: auto !important;
+  z-index: 3 !important;
+}
+[data-promptbox-voice-active] [data-promptbox-voice-controls] button svg {
+  display: none !important;
+}
+[data-promptbox-shell]:has(> [data-new-thread-footer]),
+[data-follow-up-composer] {
+  position: relative;
+}
+[data-new-thread-footer],
+[data-follow-up-composer-footer] {
+  position: absolute !important;
+  right: 4px !important;
+  bottom: 0 !important;
+  left: auto !important;
+  width: auto !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  max-height: 28px !important;
+  margin: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  background: transparent !important;
+}
+[data-promptbox-action-row] button[aria-label^="Provider, model"],
+[data-new-thread-footer] button[aria-label="Permission mode"],
+[data-follow-up-composer-footer] button[aria-label="Permission mode"],
+[data-follow-up-composer-footer] button[aria-label^="Context window"] {
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 22px !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  font-size: 11px !important;
+  line-height: 22px !important;
+  font-weight: 400 !important;
+}
+[data-promptbox-action-row] button[aria-label^="Provider, model"],
+[data-new-thread-footer],
+[data-follow-up-composer-footer],
+[data-seat-context] {
+  visibility: hidden !important;
+}
+html[data-composer-meta="ready"] [data-promptbox-action-row] button[aria-label^="Provider, model"],
+html[data-composer-meta="ready"] [data-new-thread-footer],
+html[data-composer-meta="ready"] [data-follow-up-composer-footer],
+html[data-composer-meta="ready"] [data-seat-context] {
+  visibility: visible !important;
+}
+.pb-4:has([data-promptbox-shell]),
+[data-testid="root-compose-compact-composer"] > .bg-background {
+  padding-bottom: 6px !important;
+}
+[data-new-thread-footer] button[aria-label="Permission mode"],
+[data-follow-up-composer-footer] button[aria-label="Permission mode"] {
+  color: #191919 !important;
+}
+[data-promptbox-action-row] button[aria-label^="Provider, model"] {
+  gap: 10px !important;
+}
+[data-promptbox-action-row] button[aria-label^="Provider, model"] span.truncate {
+  color: #191919 !important;
+}
+[data-promptbox-action-row] button[aria-label^="Provider, model"] [data-promptbox-hide-compact] {
+  color: #8c8c8c !important;
+  font-weight: 400 !important;
+}
+[data-promptbox-action-row] button[aria-label^="Provider, model"] > span > svg,
+[data-promptbox-action-row] button[aria-label^="Provider, model"] > span > img,
+[data-promptbox-action-row] button[aria-label^="Provider, model"] > span > [data-icon],
+[data-promptbox-action-row] button[aria-label^="Provider, model"] > span > [data-icon-root],
+[data-promptbox-action-row] button[aria-label^="Provider, model"] > span > [data-provider-logo],
+[data-promptbox-action-row] button[aria-label^="Provider, model"] > span > :has(svg),
+[data-promptbox-action-row] button[aria-label^="Provider, model"] > span > :has([data-icon-root]),
+[data-promptbox-action-row] button[aria-label^="Provider, model"] > span > :has([data-provider-logo]) {
+  display: none !important;
+}
+[data-promptbox-action-row] button[aria-label^="Provider, model"] svg,
+[data-new-thread-footer] button[aria-label="Permission mode"] svg,
+[data-follow-up-composer-footer] button[aria-label="Permission mode"] svg,
+[data-follow-up-composer-footer] button[aria-label^="Context window"] svg {
+  width: 14px !important;
+  height: 14px !important;
+}
+[data-promptbox-action-row] button[aria-label^="Provider, model"] [data-icon="ChevronDown"],
+[data-new-thread-footer] button[aria-label="Permission mode"] [data-icon="ChevronDown"],
+[data-follow-up-composer-footer] button[aria-label="Permission mode"] [data-icon="ChevronDown"] {
+  display: none !important;
+}
+button[data-permission-alias="auto"] [data-promptbox-compact-label] {
+  display: none !important;
+}
+button[data-permission-alias="auto"] [data-promptbox-full-label],
+button[data-permission-alias="auto"] > span > span.truncate:not([data-promptbox-compact-label]) {
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 22px !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+  color: transparent !important;
+}
+button[data-permission-alias="auto"] [data-promptbox-full-label]::after,
+button[data-permission-alias="auto"] > span > span.truncate:not([data-promptbox-compact-label]):not([data-promptbox-full-label])::after {
+  content: "Auto";
+  font-size: 11px;
+  line-height: 22px;
+  font-weight: 400;
+  color: #191919;
+}
+[data-testid="thread-secondary-panel-top-chrome"] {
+  position: relative !important;
+  z-index: 30 !important;
+  align-items: stretch !important;
+  padding-left: 0 !important;
+  background: color-mix(in oklab, var(--foreground) 4%, var(--background)) !important;
+  box-shadow: inset 0 -1px 0 var(--border) !important;
+}
+[data-testid="thread-secondary-panel-top-chrome"] > div {
+  align-items: stretch !important;
+}
+[role="toolbar"][aria-label="Right panel views"] {
+  gap: 0 !important;
+  align-items: stretch !important;
+}
+[role="toolbar"][aria-label="Right panel views"] [data-testid="secondary-panel-tab-strip"] {
+  flex: 0 1 auto !important;
+  align-self: stretch !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  height: auto !important;
+  background: transparent !important;
+}
+[role="toolbar"][aria-label="Right panel views"] > button {
+  align-self: center !important;
+  margin-left: 6px !important;
+}
+[data-secondary-panel-tab-scroll-region],
+[data-secondary-panel-tab-scroll-region] > div:has([data-secondary-panel-tab-content]) {
+  flex: 0 1 auto !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  background: transparent !important;
+}
+[data-secondary-panel-tab-content] {
+  width: max-content !important;
+  max-width: none !important;
+  height: 100% !important;
+  gap: 0 !important;
+  align-items: stretch !important;
+  background: transparent !important;
+}
+[data-secondary-panel-tab-content] > div[id^="DndDescribedBy"],
+[data-secondary-panel-tab-content] > div[id^="DndLiveRegion"] {
+  display: none !important;
+}
+[data-secondary-panel-tab-content] > :not([id^="Dnd"]) {
+  flex: 0 0 auto !important;
+  display: flex !important;
+  width: 150px !important;
+  min-width: 110px !important;
+  max-width: 220px !important;
+}
+[data-secondary-panel-tab-content] [data-tab-pill] {
+  position: relative !important;
+  flex: 1 1 auto !important;
+  display: flex !important;
+  align-items: stretch !important;
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 0 !important;
+  border-right: 1px solid var(--border) !important;
+  background: transparent !important;
+  color: var(--muted-foreground) !important;
+  box-shadow: none !important;
+}
+[data-secondary-panel-tab-content] [data-tab-pill]:hover {
+  background: color-mix(in oklab, var(--foreground) 4%, transparent) !important;
+}
+[data-secondary-panel-tab-content] [data-tab-pill]:has(> button[aria-pressed="true"]) {
+  background: var(--background) !important;
+  color: var(--foreground) !important;
+  box-shadow: inset 0 1px 0 var(--foreground), 0 1px 0 var(--background) !important;
+}
+[data-secondary-panel-tab-content] [data-tab-pill] > button:not([data-tab-pill-close]):not([aria-label^="Close "]) {
+  flex: 1 1 auto !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 6px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  padding: 0 30px 0 12px !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: inherit !important;
+  box-shadow: none !important;
+}
+[data-secondary-panel-tab-content] [data-tab-pill] > button > span {
+  opacity: 1 !important;
+  margin-right: 0 !important;
+}
+[data-secondary-panel-tab-content] [data-tab-pill] .truncate {
+  max-width: none !important;
+  text-align: left !important;
+}
+[data-tab-pill-close],
+[data-secondary-panel-tab-content] button[aria-label^="Close "] {
+  position: absolute !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  left: auto !important;
+  right: 6px !important;
+  top: 50% !important;
+  width: 18px !important;
+  height: 18px !important;
+  padding: 0 !important;
+  border-radius: 4px !important;
+  opacity: 0.6 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  transform: translateY(-50%) !important;
+  color: inherit !important;
+  z-index: 2 !important;
+}
+[data-secondary-panel-tab-content] [data-tab-pill]:hover [data-tab-pill-close],
+[data-secondary-panel-tab-content] [data-tab-pill]:has(> button[aria-pressed="true"]) [data-tab-pill-close],
+[data-secondary-panel-tab-content] [data-tab-pill]:hover button[aria-label^="Close "],
+[data-secondary-panel-tab-content] [data-tab-pill]:has(> button[aria-pressed="true"]) button[aria-label^="Close "] {
+  opacity: 1 !important;
+}
+[data-tab-pill-close]:hover,
+[data-secondary-panel-tab-content] button[aria-label^="Close "]:hover {
+  background: color-mix(in oklab, var(--foreground) 10%, transparent) !important;
+}
+[data-new-thread-footer] button[aria-label^="Context window"],
+[data-follow-up-composer-footer] button[aria-label^="Context window"] {
+  display: none !important;
+}
+aside[data-pane-view="terminal"] [data-pane-kind="info"],
+aside[data-pane-view="info"] [data-pane-kind="tabs"] {
+  display: none !important;
+}
+aside[data-pane-view="terminal"] [data-pane-kind="tabs"],
+aside[data-pane-view="info"] [data-pane-kind="info"] {
+  left: 0 !important;
+  width: 100% !important;
+}
+aside[data-pane-fit="split"] [data-pane-kind="info"] {
+  left: 0 !important;
+  width: 340px !important;
+}
+aside[data-pane-fit="split"] [data-pane-kind="tabs"] {
+  left: 340px !important;
+  width: calc(100% - 340px) !important;
+}
+aside[data-pane-fit="split"] [role="separator"],
+aside[data-pane-view="terminal"] [role="separator"],
+aside[data-pane-view="info"] [role="separator"] {
+  display: none !important;
+}
+svg[data-icon="Terminal"] {
+  background-color: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M5 7.5l4.5 4.5L5 16.5M12.5 17h6.5' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M5 7.5l4.5 4.5L5 16.5M12.5 17h6.5' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+svg[data-icon="Terminal"] > * {
+  display: none;
+}
+[data-seat-context] {
+  position: fixed;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #191919;
+  cursor: pointer;
+  z-index: 20;
+  pointer-events: auto;
+}
+[data-seat-context-card] {
+  position: fixed;
+  z-index: 40;
+  width: 340px;
+  box-sizing: border-box;
+  padding: 12px 14px 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--background);
+  color: var(--foreground);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 12%);
+  font-size: 12px;
+  line-height: 1.35;
+}
+[data-seat-context-card][hidden] {
+  display: none !important;
+}
+[data-seat-context-head] {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+[data-seat-context-title] {
+  font-size: 13px;
+  font-weight: 600;
+}
+[data-seat-context-report] {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  font: inherit;
+  cursor: pointer;
+}
+[data-seat-context-report]:hover {
+  color: var(--foreground);
+}
+[data-seat-context-summary] {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+[data-seat-context-percent] {
+  font-weight: 500;
+}
+[data-seat-context-tokens] {
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+[data-seat-context-bar] {
+  display: flex;
+  height: 6px;
+  overflow: hidden;
+  margin-bottom: 8px;
+  border-radius: 999px;
+  background: var(--border);
+}
+[data-seat-context-bar] > span {
+  height: 100%;
+}
+[data-seat-context-rows] {
+  display: flex;
+  flex-direction: column;
+}
+[data-seat-context-row] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+}
+[data-seat-context-swatch] {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 2px;
+}
+[data-seat-context-label] {
+  min-width: 0;
+  flex: 1;
+}
+[data-seat-context-count] {
+  flex: none;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+[data-seat-usage] {
+  margin: -4px -4px 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+[data-seat-usage-head],
+[data-seat-usage-meta] {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+[data-seat-usage-head] {
+  margin-bottom: 8px;
+}
+[data-seat-usage-head] > span,
+[data-seat-usage-meta] > span:first-child {
+  min-width: 0;
+  flex: 1;
+}
+[data-seat-usage-all] {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  font: inherit;
+  cursor: pointer;
+}
+[data-seat-usage-meta] {
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+[data-seat-usage-meta] > span:first-child {
+  color: var(--foreground);
+}
+[data-seat-usage-track] {
+  height: 3px;
+  margin: 6px 0 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--border);
+}
+[data-seat-usage-track] > span {
+  display: block;
+  height: 100%;
+}
+[data-seat-picker] {
+  position: fixed;
+  z-index: 25;
+  width: 260px;
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--background);
+  color: var(--foreground);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 8%);
+  padding: 4px;
+  font-size: 13px;
+}
+[data-seat-picker] button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+[data-seat-picker] button:hover {
+  background: var(--muted);
+}
+[data-seat-picker] [data-seat-picker-check] {
+  margin-left: auto;
+}
+[data-seat-picker] [data-seat-picker-rule] {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border);
 }
 
 `;
@@ -747,7 +1401,7 @@ function phoneControls(): PhoneControl[] {
   const controls: PhoneControl[] = [];
   for (const node of nodes) {
     const label = controlLabel(node);
-    if (!label || phoneSkip.has(label) || seen.has(label)) continue;
+    if (!label || phoneSkip.has(label) || seen.has(label) || /update available$/i.test(label) || label === "Updating") continue;
     seen.add(label);
     controls.push({
       label,
@@ -1061,8 +1715,10 @@ function fitPhoneRail(show: boolean) {
 }
 
 function ensureComposerBar() {
-  let style = document.querySelector("[data-seat-composer-bar]");
-  if (!(style instanceof HTMLStyleElement)) {
+  const found = document.querySelector("[data-seat-composer-bar]");
+  let style: HTMLStyleElement;
+  if (found instanceof HTMLStyleElement) style = found;
+  else {
     style = document.createElement("style");
     style.dataset.seatComposerBar = "true";
     document.head.appendChild(style);
@@ -1070,7 +1726,7 @@ function ensureComposerBar() {
   if (style.textContent !== COMPOSER_BAR_STYLE) style.textContent = COMPOSER_BAR_STYLE;
 }
 
-const paneInfoIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" color="currentColor" data-icon="Info" data-icon-root="" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></circle><path d="M12 16v-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path><path d="M12 8h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>`;
+const paneInfoIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" color="currentColor" data-icon="Info" data-icon-root="" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4" stroke="currentColor" stroke-width="1.5"></rect><path d="M8 8.5h.01M8 12h.01M8 15.5h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path><path d="M11.5 8.5H16M11.5 12H16M11.5 15.5H16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>`;
 
 function paintPaneInfoIcon() {
   const button = document.querySelector(
@@ -1100,25 +1756,825 @@ function placePanelUnderHeader() {
   if (common.dataset.threadSplit !== "open") common.dataset.threadSplit = "open";
 }
 
-let paneInfoWatching = false;
-let paintingPane = false;
+function aliasPermissionLabel() {
+  document.querySelectorAll('button[aria-label="Permission mode"]').forEach((button) => {
+    if (!(button instanceof HTMLElement)) return;
+    const full = button.querySelector("[data-promptbox-full-label]");
+    const plain = button.querySelector(":scope > span > span.truncate");
+    const text = (full ?? plain)?.textContent?.trim() ?? "";
+    const alias = text === "Full Access" || text === "Full";
+    if (alias && button.dataset.permissionAlias !== "auto") button.dataset.permissionAlias = "auto";
+    if (!alias && button.dataset.permissionAlias === "auto") delete button.dataset.permissionAlias;
+  });
+}
 
-function watchPaneInfoIcon() {
-  const paint = () => {
-    if (paintingPane) return;
-    paintingPane = true;
-    try {
-      paintPaneInfoIcon();
-      placePanelUnderHeader();
-    } finally {
-      paintingPane = false;
+const contextPalette = ["#6b7280", "#a855f7", "#22c55e", "#d97706", "#ec4899", "#3b82f6", "#ef4444", "#f97316"];
+const contextColors: Record<string, string> = {
+  "system prompt": "#6b7280",
+  "tool definitions": "#a855f7",
+  rules: "#22c55e",
+  skills: "#d97706",
+  "mcp & dynamic tools": "#ec4899",
+  "subagent definitions": "#3b82f6",
+  "summarized conversation": "#ef4444",
+  conversation: "#f97316",
+};
+const emptyContextRows = [
+  "System prompt",
+  "Tool definitions",
+  "Rules",
+  "Skills",
+  "MCP & dynamic tools",
+  "Subagent definitions",
+  "Summarized conversation",
+  "Conversation",
+].map((label) => ({ label, tokens: 0, color: contextColors[label.toLowerCase()] ?? "#6b7280" }));
+
+interface ContextRow {
+  label: string;
+  tokens: number;
+  color: string;
+}
+
+interface ContextView {
+  threadId: string;
+  used: number;
+  capacity: number;
+  estimated: boolean;
+  rows: ContextRow[];
+  rowsEstimated?: boolean;
+  fetchedAt: number;
+}
+
+let contextView: ContextView = { threadId: "", used: 0, capacity: 0, estimated: false, rows: emptyContextRows, fetchedAt: 0 };
+let contextRequest = 0;
+let contextBound = false;
+
+interface UsageWindowView {
+  plan: string;
+  label: string;
+  resets: string;
+  percent: number;
+}
+
+let usageWindows: UsageWindowView[] = [];
+
+function usageRowLabel(label: string): string {
+  const text = label.replace(" · ", " - ");
+  if (/ - /.test(text) || /all models/i.test(text)) return text;
+  if (/^weekly/i.test(text)) return "Weekly - all models";
+  return text;
+}
+
+function formatResetAt(iso: string | null): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const time = date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  if (date.toDateString() === new Date().toDateString()) return `Resets at ${time}`;
+  const day = date.toLocaleDateString(undefined, { weekday: "short" });
+  return `Resets ${day} ${time}`;
+}
+
+function contextThreadId(): string {
+  return window.location.pathname.match(/\/threads\/([^/]+)/)?.[1] ?? "";
+}
+
+function formatContextTokens(value: number): string {
+  if (value >= 1000) {
+    const thousands = value / 1000;
+    const text = thousands >= 100 ? String(Math.round(thousands)) : thousands.toFixed(1).replace(/\.0$/, "");
+    return `${text}K`;
+  }
+  return String(Math.round(value));
+}
+
+function contextPercent(view: ContextView): number {
+  if (view.capacity <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((view.used / view.capacity) * 100)));
+}
+
+function contextRingSvg(percent: number): string {
+  const radius = 6.5;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - percent / 100);
+  const arc = percent > 0
+    ? `<circle cx="8" cy="8" r="${radius}" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-dasharray="${circumference}" stroke-dashoffset="${offset}" transform="rotate(-90 8 8)"></circle>`
+    : "";
+  return `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="${radius}" fill="none" stroke="currentColor" stroke-width="1.75" opacity="0.45"></circle>${arc}</svg>`;
+}
+
+function escapeContextText(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[char] ?? char);
+}
+
+function contextRowsFromUsage(usage: { usedTokens?: number | null; snapshot?: { categories?: { label: string; kind: string; tokens: number }[] } } | null): ContextRow[] {
+  const categories = usage?.snapshot?.categories?.filter((category) => category.kind === "used") ?? [];
+  if (categories.length > 0) {
+    return categories.map((category, index) => {
+      const label = category.label.replace(/\s*\(deferred\)$/i, "");
+      return {
+        label,
+        tokens: category.tokens,
+        color: contextColors[label.toLowerCase()] ?? contextPalette[index % contextPalette.length] ?? "#6b7280",
+      };
+    });
+  }
+  const used = usage?.usedTokens ?? 0;
+  return emptyContextRows.map((row) => row.label === "Conversation" && used > 0 ? { ...row, tokens: used } : { ...row });
+}
+
+async function loadEstimatedRows(threadId: string, used: number, capacity: number): Promise<ContextRow[] | null> {
+  try {
+    const threadResponse = await fetch(`/api/v1/threads/${encodeURIComponent(threadId)}`, { credentials: "same-origin" });
+    if (!threadResponse.ok) return null;
+    const thread = await threadResponse.json() as { environmentId?: string | null };
+    let cwd: string | null = null;
+    if (thread.environmentId) {
+      const environmentResponse = await fetch(`/api/v1/environments/${encodeURIComponent(thread.environmentId)}`, { credentials: "same-origin" });
+      if (environmentResponse.ok) cwd = ((await environmentResponse.json()) as { path?: string | null }).path ?? null;
     }
+    const response = await fetch("/api/v1/plugins/boltrig-agent-editor/rpc/estimateContext", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ cwd, usedTokens: used, windowTokens: capacity }),
+    });
+    if (!response.ok) return null;
+    const body = await response.json() as { ok?: boolean; result?: { categories: { label: string; kind: string; tokens: number }[] } };
+    if (body.ok !== true || !body.result) return null;
+    return contextRowsFromUsage({ usedTokens: used, snapshot: { categories: body.result.categories } });
+  } catch {
+    return null;
+  }
+}
+
+function refreshContext(force = false) {
+  const threadId = contextThreadId();
+  const now = Date.now();
+  if (!force && threadId === contextView.threadId && now - contextView.fetchedAt < 5000) return;
+  if (threadId === "") {
+    contextView = { threadId: "", used: 0, capacity: 0, estimated: false, rows: emptyContextRows.map((row) => ({ ...row })), fetchedAt: now };
+    renderContextCard();
+    return;
+  }
+  const request = ++contextRequest;
+  contextView = { ...contextView, threadId, fetchedAt: now };
+  void fetch(`/api/v1/threads/${encodeURIComponent(threadId)}/context`, { credentials: "same-origin" })
+    .then((response) => response.ok ? response.json() as Promise<{ usage?: { usedTokens?: number | null; modelContextWindow?: number | null; estimated?: boolean; snapshot?: { categories?: { label: string; kind: string; tokens: number }[] } } | null }> : { usage: null })
+    .then((body) => {
+      if (request !== contextRequest) return;
+      const usage = body.usage ?? null;
+      const keepEstimate = contextView.rowsEstimated === true && contextView.threadId === threadId && (usage?.snapshot?.categories?.length ?? 0) === 0;
+      contextView = {
+        threadId,
+        used: usage?.usedTokens ?? 0,
+        capacity: usage?.modelContextWindow ?? 0,
+        estimated: usage?.estimated === true,
+        rows: keepEstimate ? contextView.rows : contextRowsFromUsage(usage),
+        ...(keepEstimate ? { rowsEstimated: true } : {}),
+        fetchedAt: Date.now(),
+      };
+      renderContextCard();
+      if ((usage?.snapshot?.categories?.length ?? 0) === 0 && (usage?.usedTokens ?? 0) > 0 && (usage?.modelContextWindow ?? 0) > 0) {
+        void loadEstimatedRows(threadId, usage?.usedTokens ?? 0, usage?.modelContextWindow ?? 0).then((rows) => {
+          if (request !== contextRequest || rows === null) return;
+          contextView = { ...contextView, rows, rowsEstimated: true };
+          renderContextCard();
+        });
+      }
+      document.querySelectorAll<HTMLElement>("[data-seat-context]").forEach((ring) => {
+        const percent = String(contextPercent(contextView));
+        if (ring.dataset.percent !== percent) {
+          ring.dataset.percent = percent;
+          ring.innerHTML = contextRingSvg(contextPercent(contextView));
+          ring.setAttribute("aria-label", `Context window ${percent}% used`);
+        }
+      });
+    })
+    .catch(() => {
+      if (request !== contextRequest) return;
+      contextView = { ...contextView, used: 0, capacity: 0, rows: emptyContextRows.map((row) => ({ ...row })) };
+      renderContextCard();
+    });
+}
+
+function usageLimitsHtml(expanded: boolean): string {
+  if (usageWindows.length === 0) return "";
+  const ordered = [...usageWindows].sort((left, right) => right.percent - left.percent);
+  const shown = expanded ? ordered : ordered.slice(0, 1);
+  const plan = ordered[0]?.plan ?? "Plan";
+  const rows = shown.map((window) => {
+    const width = Math.max(0, Math.min(window.percent, 100));
+    const color = window.percent >= 90 ? "var(--destructive)" : "var(--foreground)";
+    return `<div data-seat-usage-row><div data-seat-usage-meta><span>${escapeContextText(window.label)}</span><span>${escapeContextText(window.resets)}</span><span>${window.percent}%</span></div><div data-seat-usage-track><span style="width:${width}%;background:${color}"></span></div></div>`;
+  }).join("");
+  return `<div data-seat-usage><div data-seat-usage-head><span>Plan usage limits - ${escapeContextText(plan)}</span><button type="button" data-seat-usage-all>See all</button></div>${rows}</div>`;
+}
+
+async function refreshUsageLimits() {
+  const read = async (providerIds: string[]) => {
+    const response = await fetch("/api/v1/plugins/bb--provider-usage/rpc/getUsage", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ force: false, machineIds: null, providerIds, maxAgeMs: 120000 }),
+    });
+    if (!response.ok) return null;
+    const body = await response.json() as {
+      ok?: boolean;
+      result?: {
+        machines?: {
+          providers?: {
+            providerId?: string;
+            usage?: { status?: string; planLabel?: string | null; windows?: { label: string; usedPercent: number; resetsAt: string | null }[] } | null;
+          }[];
+        }[];
+      };
+    };
+    return body.ok === true ? body.result ?? null : null;
   };
-  paint();
-  if (paneInfoWatching) return;
-  paneInfoWatching = true;
-  const observer = new MutationObserver(() => paint());
-  observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+  try {
+    const listed = await read([]);
+    const ids = [...new Set((listed?.machines ?? []).flatMap((machine) => (
+      (machine.providers ?? []).map((provider) => provider.providerId).filter((id): id is string => typeof id === "string" && id.length > 0)
+    )))];
+    const snapshot = ids.length > 0 ? await read(ids) : listed;
+    const windows: UsageWindowView[] = [];
+    for (const machine of snapshot?.machines ?? []) {
+      for (const provider of machine.providers ?? []) {
+        if (provider.usage?.status !== "ok") continue;
+        const plan = provider.usage.planLabel || "Plan";
+        for (const window of provider.usage.windows ?? []) {
+          windows.push({
+            plan,
+            label: usageRowLabel(window.label),
+            resets: formatResetAt(window.resetsAt),
+            percent: Math.max(0, Math.round(window.usedPercent)),
+          });
+        }
+      }
+    }
+    if (windows.length > 0) {
+      usageWindows = windows;
+      renderContextCard();
+    }
+  } catch {
+    return;
+  }
+}
+
+let lastCardHtml = "";
+
+function renderContextCard() {
+  const card = document.querySelector("[data-seat-context-card]");
+  if (!(card instanceof HTMLElement) || card.hidden) return;
+  const percent = contextPercent(contextView);
+  const capacity = contextView.capacity;
+  const tokenText = capacity > 0
+    ? `${contextView.estimated ? "~" : ""}${formatContextTokens(contextView.used)} / ${formatContextTokens(capacity)} Tokens`
+    : "0 Tokens";
+  const segments = contextView.rows.filter((row) => row.tokens > 0 && capacity > 0);
+  const bar = segments.length > 0
+    ? segments.map((row) => `<span style="width:${(row.tokens / capacity) * 100}%;background:${row.color}"></span>`).join("")
+    : percent > 0 ? `<span style="width:${percent}%;background:#f97316"></span>` : "";
+  const rows = contextView.rows.map((row) => (
+    `<div data-seat-context-row><span data-seat-context-swatch style="background:${row.color}"></span><span data-seat-context-label>${escapeContextText(row.label)}</span><span data-seat-context-count>${contextView.rowsEstimated === true ? "~" : ""}${formatContextTokens(row.tokens)}</span></div>`
+  )).join("");
+  const limits = usageLimitsHtml(card.dataset.usageExpanded === "true");
+  const html = `${limits}<div data-seat-context-head><span data-seat-context-title>Context Usage</span><button type="button" data-seat-context-report>View Report</button></div><div data-seat-context-summary><span data-seat-context-percent>${percent}% Full</span><span data-seat-context-tokens>${tokenText}</span></div><div data-seat-context-bar>${bar}</div><div data-seat-context-rows>${rows}</div>`;
+  if (lastCardHtml === html) return;
+  lastCardHtml = html;
+  card.innerHTML = html;
+  const anchor = document.querySelector(`[data-seat-context="${card.dataset.anchor ?? ""}"]`);
+  if (anchor instanceof HTMLElement) placeContextCard(anchor);
+}
+
+function placeContextCard(ring: HTMLElement) {
+  const card = document.querySelector("[data-seat-context-card]");
+  if (!(card instanceof HTMLElement) || card.hidden) return;
+  const rect = ring.getBoundingClientRect();
+  const width = card.offsetWidth || 340;
+  const height = card.offsetHeight || 260;
+  const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
+  let top = rect.top - height - 10;
+  if (top < 8) top = rect.bottom + 10;
+  card.style.left = `${Math.round(left)}px`;
+  card.style.top = `${Math.round(top)}px`;
+}
+
+function ensureContextCard(): HTMLElement {
+  const existing = document.querySelector("[data-seat-context-card]");
+  if (existing instanceof HTMLElement) return existing;
+  const card = document.createElement("div");
+  card.dataset.seatContextCard = "true";
+  card.hidden = true;
+  card.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest("[data-seat-usage-all]") !== null) {
+      card.dataset.usageExpanded = card.dataset.usageExpanded === "true" ? "false" : "true";
+      renderContextCard();
+      return;
+    }
+    if (target.closest("[data-seat-context-report]") === null) return;
+    showInfoPane();
+  });
+  document.body.appendChild(card);
+  return card;
+}
+
+function toggleContextCard(ring: HTMLElement) {
+  const card = ensureContextCard();
+  const open = card.hidden || card.dataset.anchor !== ring.dataset.seatContext;
+  card.dataset.anchor = ring.dataset.seatContext ?? "";
+  card.hidden = !open;
+  if (!open) return;
+  refreshContext(true);
+  void refreshUsageLimits();
+  renderContextCard();
+  placeContextCard(ring);
+}
+
+function bindContextCard() {
+  if (contextBound) return;
+  contextBound = true;
+  document.addEventListener("click", (event) => {
+    const card = document.querySelector("[data-seat-context-card]");
+    if (!(card instanceof HTMLElement) || card.hidden) return;
+    const target = event.target;
+    if (!(target instanceof Node)) return;
+    if (card.contains(target)) return;
+    if (target instanceof Element && target.closest("[data-seat-context]") !== null) return;
+    card.hidden = true;
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    const card = document.querySelector("[data-seat-context-card]");
+    if (card instanceof HTMLElement) card.hidden = true;
+  });
+}
+
+function paintContextRing() {
+  bindContextCard();
+  refreshContext();
+  const footers = document.querySelectorAll("[data-new-thread-footer], [data-follow-up-composer-footer]");
+  const used = new Set<Element>();
+  const percent = contextPercent(contextView);
+  footers.forEach((footer, index) => {
+    if (!(footer instanceof HTMLElement)) return;
+    const permission = footer.querySelector('button[aria-label="Permission mode"]');
+    const existingRing = document.querySelector(`[data-seat-context="${index}"]`);
+    let ring: HTMLButtonElement | null = existingRing instanceof HTMLButtonElement ? existingRing : null;
+    const show = permission instanceof HTMLElement && footer.getClientRects().length > 0;
+    if (!show) {
+      footer.style.removeProperty("padding-right");
+      if (existingRing !== null) existingRing.remove();
+      return;
+    }
+    if (footer.style.getPropertyValue("padding-right") !== "32px") {
+      footer.style.setProperty("padding-right", "32px", "important");
+    }
+    if (ring === null) {
+      const created = document.createElement("button");
+      created.type = "button";
+      created.dataset.seatContext = String(index);
+      created.dataset.percent = "";
+      created.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleContextCard(created);
+      });
+      document.body.appendChild(created);
+      ring = created;
+    }
+    const nextPercent = String(percent);
+    if (ring.dataset.percent !== nextPercent) {
+      ring.dataset.percent = nextPercent;
+      ring.innerHTML = contextRingSvg(percent);
+      ring.setAttribute("aria-label", `Context window ${nextPercent}% used`);
+      ring.title = `Context window ${nextPercent}% used`;
+    }
+    const model = footer.parentElement?.querySelector('[data-promptbox]:not([data-promptbox-compact]) button[aria-label^="Provider, model"]');
+    const anchor = model instanceof HTMLElement ? model : permission;
+    const anchorRect = anchor.getBoundingClientRect();
+    const permRect = permission.getBoundingClientRect();
+    ring.style.left = `${Math.round(permRect.right + 10)}px`;
+    ring.style.top = `${Math.round(anchorRect.top + anchorRect.height / 2 - 11)}px`;
+    used.add(ring);
+    const card = document.querySelector("[data-seat-context-card]");
+    if (card instanceof HTMLElement && !card.hidden && card.dataset.anchor === String(index)) placeContextCard(ring);
+  });
+  document.querySelectorAll("[data-seat-context]").forEach((ring) => {
+    if (!used.has(ring)) ring.remove();
+  });
+}
+
+function alignComposerMeta() {
+  document.querySelectorAll("[data-new-thread-footer], [data-follow-up-composer-footer]").forEach((footer) => {
+    if (!(footer instanceof HTMLElement)) return;
+    const row = footer.parentElement?.querySelector("[data-promptbox]:not([data-promptbox-compact]) [data-promptbox-action-row]");
+    if (!(row instanceof HTMLElement)) return;
+    const box = row.closest("[data-promptbox]");
+    if (!(box instanceof HTMLElement)) return;
+    const shell = footer.parentElement;
+    if (shell instanceof HTMLElement) {
+      const top = `${Math.round(row.getBoundingClientRect().top - shell.getBoundingClientRect().top)}px`;
+      const height = `${Math.round(row.getBoundingClientRect().height)}px`;
+      if (footer.style.getPropertyValue("top") !== top) footer.style.setProperty("top", top, "important");
+      if (footer.style.getPropertyValue("height") !== height) footer.style.setProperty("height", height, "important");
+      footer.style.setProperty("bottom", "auto", "important");
+      footer.style.setProperty("translate", "none", "important");
+    }
+    const permission = footer.querySelector('button[aria-label="Permission mode"]');
+    const context = footer.querySelector('button[aria-label^="Context window"]');
+    const anchor = permission instanceof HTMLElement ? permission : context;
+    let pad = 12;
+    if (anchor instanceof HTMLElement) {
+      pad = Math.max(12, Math.ceil(row.getBoundingClientRect().right - anchor.getBoundingClientRect().left) + 10);
+    }
+    const next = `${pad}px`;
+    if (row.style.getPropertyValue("padding-right") !== next) {
+      row.style.setProperty("padding-right", next, "important");
+    }
+    if (document.documentElement.dataset.composerMeta !== "ready") {
+      document.documentElement.dataset.composerMeta = "ready";
+    }
+  });
+}
+
+function placeSeatPicker() {
+  const picker = document.querySelector("[data-seat-picker]");
+  if (!(picker instanceof HTMLElement)) return;
+  const shell = document.querySelector("[data-new-thread-footer]")?.closest("[data-promptbox-shell]");
+  if (!(shell instanceof HTMLElement)) return;
+  const shellRect = shell.getBoundingClientRect();
+  const top = 72;
+  const mid = top + Math.max(24, shellRect.top - top) / 2;
+  picker.style.left = `${Math.round(shellRect.left + shellRect.width / 2)}px`;
+  picker.style.top = `${Math.round(mid)}px`;
+}
+
+let paneButtonsBound = false;
+let paneButtonUntil = 0;
+type PaneView = "both" | "info" | "terminal";
+let paneView: PaneView = "both";
+let lastTerminalIndex = 0;
+
+function rightAside(): HTMLElement | null {
+  const aside = document.querySelector("aside:has([data-testid='thread-secondary-panel-top-chrome'])");
+  return aside instanceof HTMLElement ? aside : null;
+}
+
+let panelIntent: { open: boolean; until: number } | null = null;
+
+function expectPanel(open: boolean) {
+  panelIntent = { open, until: Date.now() + 900 };
+}
+
+function rightPanelOpen(): boolean {
+  if (panelIntent !== null) {
+    if (Date.now() < panelIntent.until) return panelIntent.open;
+    panelIntent = null;
+  }
+  const aside = rightAside();
+  if (aside === null) return false;
+  return aside.getBoundingClientRect().left < window.innerWidth - 20;
+}
+
+function terminalPills(): { select: HTMLElement; selected: boolean }[] {
+  const found: { select: HTMLElement; selected: boolean }[] = [];
+  document.querySelectorAll("[data-tab-pill]").forEach((pill) => {
+    if (pill.querySelector('svg[data-icon="Terminal"]') === null) return;
+    const select = pill.querySelector(":scope > button:not([data-tab-pill-close]):not([aria-label^='Close '])");
+    if (!(select instanceof HTMLElement)) return;
+    found.push({ select, selected: select.getAttribute("aria-pressed") === "true" });
+  });
+  return found;
+}
+
+function toggleRightPanelKey() {
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "j", code: "KeyJ", metaKey: true, bubbles: true, cancelable: true }));
+}
+
+function hideRightPanel() {
+  const hide = rightAside()?.querySelector("button[aria-label^='Hide right panel']");
+  expectPanel(false);
+  if (hide instanceof HTMLElement) hide.click();
+}
+
+function newTabPill(): HTMLElement | null {
+  for (const pill of document.querySelectorAll("[data-tab-pill]")) {
+    if (pill instanceof HTMLElement && pill.querySelector('svg[data-icon="NewTab"]') !== null) return pill;
+  }
+  return null;
+}
+
+function settleTerminalAfterShow(hadNewTab: boolean, attempts: number) {
+  window.setTimeout(() => {
+    const placeholder = newTabPill();
+    if (!hadNewTab && placeholder !== null) {
+      const close = placeholder.querySelector("button[aria-label^='Close ']");
+      if (close instanceof HTMLElement) close.click();
+      if (attempts > 0) settleTerminalAfterShow(hadNewTab, attempts - 1);
+      return;
+    }
+    const terminals = terminalPills();
+    if (terminals.length > 0 && !terminals.some((terminal) => terminal.selected)) {
+      (terminals[lastTerminalIndex] ?? terminals[0])?.select.click();
+      return;
+    }
+    if (attempts > 0) settleTerminalAfterShow(hadNewTab, attempts - 1);
+  }, 120);
+}
+
+function selectTerminal() {
+  const terminals = terminalPills();
+  if (terminals.some((terminal) => terminal.selected)) return;
+  (terminals[lastTerminalIndex] ?? terminals[0])?.select.click();
+}
+
+const INFO_PANE_WIDTH = 340;
+const TERMINAL_PANE_MIN = 320;
+const CHAT_PANE_MIN = 320;
+
+function paneRow(aside: HTMLElement): HTMLElement | null {
+  const row = aside.parentElement?.parentElement;
+  return row instanceof HTMLElement ? row : null;
+}
+
+function canSplitPanes(): boolean {
+  const aside = rightAside();
+  const row = aside === null ? null : paneRow(aside);
+  if (row === null) return false;
+  return row.clientWidth - CHAT_PANE_MIN >= INFO_PANE_WIDTH + TERMINAL_PANE_MIN;
+}
+
+const paneFlexOriginal = new WeakMap<HTMLElement, string>();
+
+function overrideFlex(node: HTMLElement, value: string) {
+  if (node.style.getPropertyPriority("flex") !== "important") paneFlexOriginal.set(node, node.style.getPropertyValue("flex"));
+  if (node.style.getPropertyValue("flex") !== value || node.style.getPropertyPriority("flex") !== "important") {
+    node.style.setProperty("flex", value, "important");
+  }
+}
+
+function restoreFlex(node: HTMLElement) {
+  if (node.style.getPropertyPriority("flex") !== "important") return;
+  const original = paneFlexOriginal.get(node);
+  node.style.removeProperty("flex");
+  if (original !== undefined && original !== "") node.style.setProperty("flex", original);
+  paneFlexOriginal.delete(node);
+}
+
+function clearPaneFit(aside: HTMLElement) {
+  if (aside.dataset.paneFit !== undefined) delete aside.dataset.paneFit;
+  if (aside.style.getPropertyValue("--secondary-swipe-width") !== "" && aside.style.getPropertyValue("--secondary-swipe-width") !== "50cqw") {
+    aside.style.setProperty("--secondary-swipe-width", "50cqw");
+  }
+  const panel = aside.parentElement;
+  const thread = paneRow(aside)?.firstElementChild;
+  if (panel instanceof HTMLElement) restoreFlex(panel);
+  if (thread instanceof HTMLElement && thread !== panel) restoreFlex(thread);
+}
+
+function fitSplitPanes(aside: HTMLElement) {
+  const row = paneRow(aside);
+  const panel = aside.parentElement;
+  const thread = row?.firstElementChild;
+  if (row === null || !(panel instanceof HTMLElement) || !(thread instanceof HTMLElement) || thread === panel) return;
+  const minimum = INFO_PANE_WIDTH + TERMINAL_PANE_MIN;
+  const total = row.clientWidth;
+  aside.dataset.paneFit = "split";
+  const wanted = Math.min(Math.max(Math.round(total * 0.68), minimum), total - CHAT_PANE_MIN);
+  overrideFlex(panel, `${wanted} 1 0px`);
+  overrideFlex(thread, `${total - wanted} 1 0px`);
+  aside.style.setProperty("--secondary-swipe-width", `${wanted}px`);
+}
+
+function classifyPaneKind(overlay: HTMLElement): "tabs" | "info" {
+  const terminal = overlay.querySelector(".xterm, svg[data-icon='Terminal'], svg[data-icon='NewTab']");
+  return terminal !== null ? "tabs" : "info";
+}
+
+function paintPaneView() {
+  const aside = rightAside();
+  if (aside === null) return;
+  const inner = aside.firstElementChild;
+  const overlays = inner instanceof HTMLElement
+    ? [...inner.children].filter((node): node is HTMLElement => node instanceof HTMLElement && node.className.toString().includes("absolute"))
+    : [];
+  if (overlays.length !== 2) {
+    if (aside.dataset.paneView !== undefined) delete aside.dataset.paneView;
+    clearPaneFit(aside);
+    return;
+  }
+  const first = overlays[0];
+  const second = overlays[1];
+  if (first === undefined || second === undefined) return;
+  let kinds = [classifyPaneKind(first), classifyPaneKind(second)];
+  if (kinds[0] === kinds[1]) kinds = ["info", "tabs"];
+  overlays.forEach((overlay, index) => {
+    const kind = kinds[index] ?? "info";
+    if (overlay.dataset.paneKind !== kind) overlay.dataset.paneKind = kind;
+  });
+  if (paneView === "both" && !canSplitPanes()) paneView = "terminal";
+  if (aside.dataset.paneView !== paneView) aside.dataset.paneView = paneView;
+  if (paneView === "both" && rightPanelOpen()) fitSplitPanes(aside);
+  else clearPaneFit(aside);
+}
+
+function openRightPanelWith(view: PaneView, settle: boolean) {
+  paneView = view;
+  paintPaneView();
+  expectPanel(true);
+  toggleRightPanelKey();
+  if (settle && terminalPills().length > 0) settleTerminalAfterShow(newTabPill() !== null, 8);
+}
+
+function onInfoClick() {
+  if (!rightPanelOpen()) {
+    openRightPanelWith("info", true);
+    return;
+  }
+  if (!canSplitPanes()) {
+    if (paneView === "info") {
+      hideRightPanel();
+      paneView = "both";
+    } else paneView = "info";
+  } else if (paneView === "both") paneView = "terminal";
+  else if (paneView === "terminal") paneView = "both";
+  else {
+    hideRightPanel();
+    paneView = "both";
+  }
+  paintPaneView();
+}
+
+function showInfoPane() {
+  if (!rightPanelOpen()) {
+    openRightPanelWith("info", true);
+    return;
+  }
+  if (paneView === "terminal") paneView = canSplitPanes() ? "both" : "info";
+  paintPaneView();
+}
+
+function onTerminalClick() {
+  const terminals = terminalPills();
+  const activeIndex = terminals.findIndex((terminal) => terminal.selected);
+  if (activeIndex >= 0) lastTerminalIndex = activeIndex;
+  if (terminals.length === 0) {
+    return;
+  }
+  if (!rightPanelOpen()) {
+    openRightPanelWith("terminal", true);
+    return;
+  }
+  if (!canSplitPanes()) {
+    if (paneView === "info") {
+      paneView = "terminal";
+      selectTerminal();
+    } else {
+      hideRightPanel();
+      paneView = "both";
+    }
+  } else if (paneView === "both") paneView = "info";
+  else if (paneView === "info") {
+    paneView = "both";
+    selectTerminal();
+  } else {
+    hideRightPanel();
+    paneView = "both";
+  }
+  paintPaneView();
+}
+
+function bindPaneButtons() {
+  if (paneButtonsBound) return;
+  paneButtonsBound = true;
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const info = target.closest("[data-thread-header-pane-actions] > button[aria-label*='right panel']");
+    const terminal = target.closest("[data-workspace-windows] button[aria-label='Terminal']");
+    const other = target.closest("[data-workspace-windows] button[aria-label='Browser'], [data-workspace-windows] button[aria-label='Files']");
+    if (other !== null && paneView === "info") {
+      paneView = "both";
+      paintPaneView();
+    }
+    if (info === null && terminal === null) return;
+    const now = Date.now();
+    if (terminal instanceof HTMLElement && terminalPills().length === 0) {
+      paneView = "terminal";
+      paintPaneView();
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (now < paneButtonUntil) return;
+    paneButtonUntil = now + 400;
+    if (info !== null) onInfoClick();
+    else onTerminalClick();
+  }, true);
+}
+
+const visionAnswers = new Map<string, { image: boolean | null; at: number }>();
+const visionPending = new Set<string>();
+let visionBlocked = false;
+let visionBound = false;
+
+function selectedModelName(box: Element): string {
+  const button = box.parentElement?.querySelector('button[aria-label^="Provider, model"]') ?? document.querySelector('button[aria-label^="Provider, model"]');
+  const label = button?.querySelector("span.truncate");
+  return label?.textContent?.trim() ?? "";
+}
+
+function requestVision(name: string) {
+  if (name === "" || visionPending.has(name)) return;
+  const known = visionAnswers.get(name);
+  if (known !== undefined && Date.now() - known.at < 600000) return;
+  visionPending.add(name);
+  void fetch("/api/v1/plugins/boltrig-agent-editor/rpc/modelVision", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ displayName: name }),
+  })
+    .then((response) => response.ok ? response.json() as Promise<{ ok?: boolean; result?: { image: boolean | null } }> : null)
+    .then((body) => {
+      visionAnswers.set(name, { image: body?.ok === true ? body.result?.image ?? null : null, at: Date.now() });
+    })
+    .catch(() => {
+      visionAnswers.set(name, { image: null, at: Date.now() });
+    })
+    .finally(() => visionPending.delete(name));
+}
+
+function bindVisionGuard() {
+  if (visionBound) return;
+  visionBound = true;
+  document.addEventListener("click", (event) => {
+    if (!visionBlocked) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest("[data-promptbox-submit-group] button") === null) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }, true);
+  document.addEventListener("keydown", (event) => {
+    if (!visionBlocked || event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+    const target = event.target;
+    if (!(target instanceof Element) || target.closest("[data-promptbox]") === null) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }, true);
+}
+
+function paintVisionGuard() {
+  bindVisionGuard();
+  const box = document.querySelector("[data-promptbox]:not([data-promptbox-compact])");
+  let blocked = false;
+  let message = "";
+  if (box instanceof HTMLElement) {
+    const images = box.querySelectorAll("button.cursor-zoom-in img");
+    if (images.length > 0) {
+      const name = selectedModelName(box);
+      requestVision(name);
+      if (visionAnswers.get(name)?.image === false) {
+        blocked = true;
+        message = `${name} can't read images. Remove the attached image or choose a model with vision before sending.`;
+      }
+    }
+  }
+  visionBlocked = blocked;
+  const existing = document.querySelector("[data-seat-vision-warning]");
+  if (!blocked || !(box instanceof HTMLElement)) {
+    existing?.remove();
+    return;
+  }
+  if (existing instanceof HTMLElement) {
+    if (existing.textContent !== message) existing.textContent = message;
+    return;
+  }
+  const warning = document.createElement("div");
+  warning.dataset.seatVisionWarning = "true";
+  warning.setAttribute("role", "alert");
+  warning.textContent = message;
+  box.insertBefore(warning, box.firstChild);
+}
+
+function paintPaneChrome() {
+  bindPaneButtons();
+  paintPaneView();
+  paintPaneInfoIcon();
+  placePanelUnderHeader();
+  aliasPermissionLabel();
+  alignComposerMeta();
+  paintContextRing();
+  paintVisionGuard();
+  placeSeatPicker();
 }
 
 function remembered(): Record<string, string[]> {
@@ -1182,60 +2638,15 @@ function rememberThread(seatId: string, threadId: string) {
   localStorage.setItem(rememberedKey, JSON.stringify(threads));
 }
 
-function latestThread(seatId: string): string | undefined {
-  const ids = remembered()[seatId];
-  return ids?.[ids.length - 1];
-}
-
 let clickToken = 0;
-let chooseTimer = 0;
 
-function chooseAgent(seatId: string, token: number) {
-  window.clearTimeout(chooseTimer);
-  let attempt = 0;
-  const pick = () => {
-    if (token !== clickToken) return;
-    writeMode(seatId);
-    pinSeatName(seatId);
-    const button = document.querySelector('button[aria-label="Agent options"]');
-    if (!(button instanceof HTMLButtonElement)) {
-      attempt += 1;
-      if (attempt < 8) chooseTimer = window.setTimeout(pick, 80);
-      return;
-    }
-    if (button.textContent?.includes(seatId)) return;
-    button.disabled = false;
-    button.click();
-    chooseTimer = window.setTimeout(() => {
-      if (token !== clickToken) return;
-      const item = [...document.querySelectorAll('[role="menuitem"]')].find((node) => node.textContent?.includes(seatId));
-      if (item instanceof HTMLElement) item.click();
-      paintSeatName();
-    }, 80);
-  };
-  chooseTimer = window.setTimeout(pick, 280);
+function seatMode(seatId: string) {
+  writeMode(seatId);
+  pinSeatName(seatId);
 }
-
-const treePad = 4;
-const treeIndent = 12;
 
 function sidePad(depth: number): CSSProperties {
-  return { paddingLeft: treePad + depth * treeIndent };
-}
-
-function Guide({ depth }: { depth: number }) {
-  return (
-    <span
-      aria-hidden
-      data-indent-guide=""
-      className="pointer-events-none absolute bottom-0 top-0 w-px"
-      style={{
-        left: treePad + (depth - 1) * treeIndent + 8,
-        zIndex: 1,
-        background: "color-mix(in oklab, var(--foreground) 22%, transparent)",
-      }}
-    />
-  );
+  return { paddingLeft: 8 + depth * 16 };
 }
 
 function SeatRow({
@@ -1247,7 +2658,7 @@ function SeatRow({
 }) {
   return (
     <div
-      className="flex h-7 w-full items-center gap-2 rounded-md pr-2 text-[13px] hover:bg-state-hover"
+      className="flex h-7 w-full items-center gap-2 rounded-md pr-2 text-[13px] hover:bg-state-hover active:bg-state-hover"
       style={{
         ...sidePad(depth),
         userSelect: "none",
@@ -1264,7 +2675,8 @@ function FoldMark({ open }: { open: boolean }) {
     <span
       aria-hidden
       className="inline-block size-1.5 shrink-0 border-b border-r border-current"
-      style={{ transform: open ? "rotate(45deg)" : "rotate(-45deg)", marginBottom: open ? 2 : 0 }}
+      data-fold-mark=""
+      style={{ transform: open ? "rotate(45deg)" : "rotate(-45deg)", marginBottom: open ? 2 : 0, transition: "transform 150ms ease" }}
     />
   );
 }
@@ -1277,14 +2689,14 @@ function Disclose({
   present: boolean;
   onClick: () => void;
 }) {
-  if (!present) return <span className="size-4 shrink-0" aria-hidden="true" />;
+  if (!present) return <span data-fold-space="" className="h-7 w-7 shrink-0" aria-hidden="true" />;
   return (
     <button
       type="button"
       aria-expanded={expanded}
       aria-label={expanded ? `Collapse ${name}` : `Expand ${name}`}
       onClick={onClick}
-      className={`flex size-4 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground focus-visible:text-foreground ${focusRing}`}
+      className={`flex h-7 w-7 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground focus-visible:text-foreground ${focusRing}`}
       style={{ ...quietButton, color: undefined }}
     >
       <FoldMark open={expanded} />
@@ -1321,7 +2733,13 @@ export function SeatSidebar({ onNavigate, activeThreadId }: PluginThreadListProp
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   const [status, setStatus] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
-  const [currentThread, setCurrentThread] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+  const [currentThread, setCurrentThread] = useState<string | null>(() => {
+    const match = window.location.pathname.match(/\/threads\/([^/]+)/);
+    return match?.[1] ? decodeURIComponent(match[1]) : null;
+  });
+  const [environments, setEnvironments] = useState<Array<{ id: string; label: string }>>([]);
+  const [environmentOpen, setEnvironmentOpen] = useState(false);
   const [onHome, setOnHome] = useState(false);
   const [activeSeat, setActiveSeat] = useState<string | null>(() => sessionStorage.getItem(activeKey));
   const [activeFolder, setActiveFolder] = useState<string | null>(() => sessionStorage.getItem(folderKey));
@@ -1332,19 +2750,19 @@ export function SeatSidebar({ onNavigate, activeThreadId }: PluginThreadListProp
       rpc.call("folders", null).catch(() => ({ folders: [] as SeatFolder[], company: "" })),
     ]).then(([result, homes]) => {
       phoneWorkspaceName = homes.company;
-      const seats = result.seats.filter((seat) => managed.has(seat.tier) && !loose.has(seat.id));
-      const next = homes.folders.length > 0 ? folderTree(seats, homes.folders) : tree(seats);
+      const next = homeRows(result.seats, homes.folders);
       indexNodes(next);
       publishHeadTrees(next);
       const active = sessionStorage.getItem(folderKey) ?? sessionStorage.getItem(activeKey);
       setNodes(next);
       setOpen(active ? withOnlyHead(next, new Set(), active) : new Set());
+      setStatus(null);
       setReady(true);
     }).catch((error: unknown) => {
       setStatus(error instanceof Error ? error.message : String(error));
       setReady(true);
     });
-  }, [rpc]);
+  }, [rpc, reload]);
 
   useEffect(() => {
     const key = activeFolder ?? activeSeat;
@@ -1358,12 +2776,13 @@ export function SeatSidebar({ onNavigate, activeThreadId }: PluginThreadListProp
 
   useEffect(() => {
     ensureComposerBar();
-    watchPaneInfoIcon();
+    paintPaneChrome();
     paintSeatName();
     fitPhoneSidebar();
     const onMove = () => {
       paintSeatName();
       fitPhoneSidebar();
+      paintPaneChrome();
     };
     window.addEventListener("scroll", onMove, true);
     window.addEventListener("resize", onMove);
@@ -1374,9 +2793,11 @@ export function SeatSidebar({ onNavigate, activeThreadId }: PluginThreadListProp
   }, []);
 
   useEffect(() => {
+    paintPaneChrome();
     const timer = window.setInterval(() => {
       paintSeatName();
       fitPhoneSidebar();
+      paintPaneChrome();
       const pending = sessionStorage.getItem(pendingKey);
       const match = window.location.pathname.match(/\/threads\/([^/]+)/);
       const threadId = match?.[1] ? decodeURIComponent(match[1]) : null;
@@ -1564,17 +2985,7 @@ export function SeatSidebar({ onNavigate, activeThreadId }: PluginThreadListProp
           agent: seatId,
           focusPrompt: true,
         });
-        let attempt = 0;
-        const apply = () => {
-          if (token !== clickToken) return;
-          if (window.location.pathname === "/") {
-            chooseAgent(seatId, token);
-            return;
-          }
-          attempt += 1;
-          if (attempt < 20) window.setTimeout(apply, 50);
-        };
-        window.setTimeout(apply, 50);
+        seatMode(seatId);
       })();
     };
     document.addEventListener("click", onClick, true);
@@ -1614,56 +3025,15 @@ export function SeatSidebar({ onNavigate, activeThreadId }: PluginThreadListProp
         ? await workspaceForPath(node.folder.path, node.folder.name).catch(() => null)
         : await workspaceForSeat(seat.id).catch(() => null);
       if (!current()) return;
-      let threadId: string | null = null;
-      if (workspace?.own) {
-        const listed = await sdk.threads.list({ projectId: workspace.projectId, limit: 30 }).catch(() => []);
-        if (!current()) return;
-        const rows = Array.isArray(listed) ? listed : [];
-        const roots = rows
-          .filter((thread) => !thread.parentThreadId && thread.archivedAt == null)
-          .sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0));
-        threadId = roots[0]?.id ?? null;
-      }
-      if (!threadId) {
-        const rememberedId = latestThread(key);
-        if (rememberedId) {
-          const thread = await sdk.threads.get({ threadId: rememberedId }).catch(() => null);
-          if (!current()) return;
-          if (thread && thread.archivedAt == null && (!workspace?.own || thread.projectId === workspace.projectId)) {
-            threadId = rememberedId;
-          }
-        }
-      }
-      if (!current()) return;
-      if (threadId && threadId !== visible) {
-        rememberThread(key, threadId);
-        sessionStorage.removeItem(pendingKey);
-        sessionStorage.removeItem(leftKey);
-        navigate.toThread(threadId);
-        void sdk.threads.update({ threadId, sessionOptions: { mode: seat.id } }).catch(() => undefined);
-        return;
-      }
-      if (threadId) return;
       sessionStorage.setItem(pendingKey, key);
       sessionStorage.setItem(leftKey, visible ?? "");
-      writeMode(seat.id);
+      seatMode(seat.id);
       navigate.toCompose({
         ...(workspace ? { projectId: workspace.projectId } : {}),
         ...(workspace?.environmentId ? { environmentId: workspace.environmentId } : {}),
         agent: seat.id,
         focusPrompt: true,
       });
-      let attempt = 0;
-      const apply = () => {
-        if (!current()) return;
-        if (window.location.pathname === "/") {
-          chooseAgent(seat.id, token);
-          return;
-        }
-        attempt += 1;
-        if (attempt < 20) window.setTimeout(apply, 50);
-      };
-      window.setTimeout(apply, 50);
     })();
   };
 
@@ -1677,7 +3047,6 @@ export function SeatSidebar({ onNavigate, activeThreadId }: PluginThreadListProp
     return (
       <div key={key} data-seat-row={key}>
         <SeatRow selected={selected} depth={depth}>
-          <Disclose name={name} expanded={expanded} present={disclose} onClick={() => toggle(key)} />
           <button
             type="button"
             onClick={() => openSeat(node)}
@@ -1689,13 +3058,9 @@ export function SeatSidebar({ onNavigate, activeThreadId }: PluginThreadListProp
             {name}
           </button>
           <span className="w-6 shrink-0 text-right text-[11px] text-muted-foreground">{roleLabel(seat)}</span>
+          <Disclose name={name} expanded={expanded} present={disclose} onClick={() => toggle(key)} />
         </SeatRow>
-        {expanded && disclose ? (
-          <div className="relative" data-indent-group="">
-            <Guide depth={depth + 1} />
-            {children.map((child) => renderFolder(child, depth + 1))}
-          </div>
-        ) : null}
+        {expanded && disclose ? children.map((child) => renderFolder(child, depth + 1)) : null}
       </div>
     );
   };
@@ -1710,12 +3075,6 @@ export function SeatSidebar({ onNavigate, activeThreadId }: PluginThreadListProp
     return (
       <div key={key} data-seat-row={key}>
         <SeatRow selected={selected} depth={0}>
-          <Disclose
-            name={name}
-            expanded={expanded}
-            present={children.length > 0}
-            onClick={() => shown(node) ? toggle(key) : openSeat(node)}
-          />
           <button
             type="button"
             onClick={() => openSeat(node)}
@@ -1728,23 +3087,102 @@ export function SeatSidebar({ onNavigate, activeThreadId }: PluginThreadListProp
             <Mark name={name} seatId={seat.id} />
             <span className="min-w-0 truncate">{name}</span>
           </button>
+          <Disclose
+            name={name}
+            expanded={expanded}
+            present={children.length > 0}
+            onClick={() => shown(node) ? toggle(key) : openSeat(node)}
+          />
         </SeatRow>
-        {expanded && children.length > 0 ? (
-          <div role="group" aria-label={name} className="relative" data-indent-group="">
-            <Guide depth={1} />
-            {children.map((child) => renderFolder(child, 1))}
-          </div>
-        ) : null}
+        {expanded && children.length > 0 ? <div role="group" aria-label={`${name} folders`}>{children.map((child) => renderFolder(child, 1))}</div> : null}
       </div>
     );
   };
 
+  const newSession = !activeThreadId && !currentThread;
+  const pickerKey = activeFolder ?? activeSeat;
+  const pickerHead = nodes.find((node) => nodeKey(node) === headKeyFor(nodes, pickerKey)) ?? nodes[0] ?? null;
+  const openEnvironments = () => {
+    setEnvironmentOpen((open) => !open);
+    const seatId = activeSeat;
+    if (!seatId) return;
+    const folder = activeFolder;
+    const name = folder?.split("/").pop() || seatId;
+    void (folder ? workspaceForPath(folder, name) : workspaceForSeat(seatId)).then(async (workspace) => {
+      if (!workspace) return;
+      const listed = await sdk.environments.list({ projectId: workspace.projectId });
+      const rows = (Array.isArray(listed) ? listed : []).map((environment) => {
+        const path = "path" in environment && typeof environment.path === "string" ? environment.path : "";
+        const named = "name" in environment && typeof environment.name === "string" ? environment.name.trim() : "";
+        const label = named || path.split("/").filter(Boolean).pop() || environment.id;
+        return { id: environment.id, label };
+      });
+      setEnvironments(rows);
+    }).catch(() => setEnvironments([]));
+  };
+  const chooseEnvironment = (environmentId: string) => {
+    const seatId = activeSeat;
+    if (!seatId) return;
+    const folder = activeFolder;
+    const name = folder?.split("/").pop() || seatId;
+    void (folder ? workspaceForPath(folder, name) : workspaceForSeat(seatId)).then((workspace) => {
+      if (!workspace) return;
+      navigate.toCompose({
+        projectId: workspace.projectId,
+        environmentId,
+        agent: seatId,
+        focusPrompt: true,
+      });
+    }).catch(() => undefined);
+  };
+  const folderIcon = (
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <path d="M2 4.2A1.2 1.2 0 0 1 3.2 3h2.4l1.1 1.2h6.1A1.2 1.2 0 0 1 14 5.4v6.4a1.2 1.2 0 0 1-1.2 1.2H3.2A1.2 1.2 0 0 1 2 11.8V4.2Z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  );
+  const checkIcon = (
+    <svg data-seat-picker-check="" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <path d="M3.5 8.2 6.4 11 12.5 4.8" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+
   return (
-    <nav aria-label="Seats" className="flex flex-col py-1 text-sm">
+    <>
+    {newSession && pickerHead ? (
+      <div data-seat-picker="" role="menu" aria-label="Agent">
+        <button type="button" role="menuitem" onClick={() => openSeat(pickerHead)}>
+          {folderIcon}
+          <span className="min-w-0 flex-1 truncate">{rowName(pickerHead)}</span>
+          {pickerKey === nodeKey(pickerHead) ? checkIcon : null}
+        </button>
+        {pickerHead.children.map((child) => (
+          <button key={nodeKey(child)} type="button" role="menuitem" onClick={() => openSeat(child)}>
+            {folderIcon}
+            <span className="min-w-0 flex-1 truncate">{rowName(child)}</span>
+            {pickerKey === nodeKey(child) ? checkIcon : null}
+          </button>
+        ))}
+        <div data-seat-picker-rule="" />
+        <button type="button" role="menuitem" onClick={openEnvironments}>
+          <span className="min-w-0 flex-1 truncate">Choose environment</span>
+          <span aria-hidden="true">{environmentOpen ? "▴" : "▾"}</span>
+        </button>
+        {environmentOpen ? environments.map((environment) => (
+          <button key={environment.id} type="button" role="menuitem" onClick={() => chooseEnvironment(environment.id)}>
+            <span className="min-w-0 flex-1 truncate">{environment.label}</span>
+          </button>
+        )) : null}
+      </div>
+    ) : null}
+    <nav aria-label="Seats" className="flex flex-col px-2 py-1 text-sm">
       {nodes.length === 0 ? (
-        <p className="px-2 py-1 text-[13px] text-muted-foreground">{status ?? (ready ? "No heads, VPs, or PMs are installed." : "Loading seats")}</p>
+        <p className="flex flex-wrap items-center gap-2 px-2 py-1 text-[13px] text-muted-foreground">
+          <span>{status ?? (ready ? "No heads, VPs, or PMs are installed." : "Loading seats")}</span>
+          {status ? <button type="button" className={`underline ${focusRing}`} style={quietButton} onClick={() => { setStatus(null); setReady(false); setReload((count) => count + 1); }}>Try again</button> : null}
+        </p>
       ) : nodes.map((node) => node.seat.tier === "head" ? renderHead(node) : renderFolder(node, 0))}
     </nav>
+    </>
   );
 }
 
@@ -1787,7 +3225,7 @@ export function SeatThreads({ threadId }: { threadId: string }) {
     <ul className="flex flex-col gap-1">
       {rows.map((row) => (
         <li key={row.id}>
-          <button type="button" onClick={() => navigate.toThread(row.id)} className={`flex h-7 w-full cursor-pointer items-center truncate rounded-md px-2 text-left text-[13px] text-foreground hover:bg-state-hover ${focusRing}`} style={{ userSelect: "none" }}>
+          <button type="button" title={row.title} onClick={() => navigate.toThread(row.id)} className={`flex h-7 w-full cursor-pointer items-center truncate rounded-md px-2 text-left text-[13px] text-foreground hover:bg-state-hover ${focusRing}`} style={{ userSelect: "none" }}>
             {row.title}
           </button>
         </li>
