@@ -1,5 +1,6 @@
 import type { ProviderErrorCategory } from "@bb/domain";
 import type { EventProjectionErrorMessage } from "./event-projection-types.js";
+import { friendlyProviderError } from "./friendly-provider-error.js";
 
 interface TimelineErrorDisplay {
   title: string;
@@ -82,6 +83,12 @@ function resolveErrorTitleDetail(
   }
 
   if (message.rawType === "provider/error") {
+    const friendly = friendlyProviderError(
+      [message.message, message.detail].filter(Boolean).join("\n"),
+    );
+    if (friendly) {
+      return friendly;
+    }
     const content = message.detail ?? message.message;
     return { title: content, detail: null };
   }
